@@ -9,6 +9,9 @@ import ProfilePage from "./pages/ProfileSettingsPage";
 import LinkSettingsPage from "./pages/LinkSettingsPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import DigitalCardEditor from "./pages/DigitalCardEditor";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import ContactBookPage from "./pages/ContactBookPage";
+
 
 function App() {
   return (
@@ -22,10 +25,12 @@ function App() {
         <Route path="/LinkSettingsPage" element={<LinkSettingsPage />} />
         <Route path="/ProfileSettingsPage" element={<ProfilePage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/contacts" element={<ContactBookPage />} />
         {/* Digital Card Editor (multi-card support) */}
         <Route path="/DigitalCardEditor" element={<DigitalCardEditor />} />
         <Route path="/DigitalCardEditor/:cardId" element={<DigitalCardEditor />} />
+
 
         {/* Optionally, redirect lower-case "digital-card-editor" to PascalCase */}
         {/* <Route path="/digital-card-editor" element={<Navigate to="/DigitalCardEditor" />} /> */}

@@ -161,22 +161,31 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
   {/* Navigation */}
   <nav className="flex-1 flex flex-col overflow-hidden">
     <ul className="flex-1 overflow-auto hide-scrollbar">
-     {navItems.map((item) => (
+    {navItems.map((item) => (
   <li
     key={item}
     className="px-6 py-3 hover:bg-gray-100 cursor-pointer text-gray-600 border-l-4 border-transparent hover:border-black font-semibold select-none"
     onClick={() => {
       if (item === "Digital Cards") {
         navigate("/dashboard#digital-cards");
-        if (isMobile) onClose(); // close the sidebar on mobile
+      } else if (item === "Analytics") {
+        navigate("/analytics");
+      } else if (item === "Tap/NFC Cards") {
+        navigate("/nfc-cards");
+      } else if (item === "Networking Toolkit") {
+        navigate("/networking-toolkit");
+      } else if (item === "Contact Book") {
+        navigate("/contacts");
       } else {
-        alert(`${item} clicked`); // handle other menu items here
+        alert(`${item} clicked`);
       }
+      if (isMobile) onClose(); // always close sidebar on mobile after nav
     }}
   >
     {item}
   </li>
 ))}
+
 
     </ul>
   </nav>
