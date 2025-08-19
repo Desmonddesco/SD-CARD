@@ -6,72 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { Link as RouterLink } from "react-router-dom";
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
+import LeftNav from "../components/LeftNav";
 
-const navItems = [
-  { key: "link-settings", label: "Link Settings", href: "/LinkSettingsPage" },
-  { key: "profile", label: "Profile", href: "/ProfileSettingsPage" },
-  { key: "notifications", label: "Notifications", href: "/NotificationsPage" },
-  { key: "upgrade", label: "Upgrade", href: "/upgrade" },
-  { key: "billing", label: "Billing", href: "/settings/billing" },
-];
-const LeftNav = ({ activeKey, onChange, isOpen, onClose, onLogout, userName }) => {
-  return (
-    <>
-      {/* Mobile overlay */}
-      <div
-        className={`fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden transition-opacity duration-300 ${
-          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <nav
-        className={`fixed top-0 left-0 z-40 h-full w-64 border-r border-gray-200 bg-white flex-shrink-0 overflow-y-auto hide-scrollbar transform transition-transform duration-300
-          ${isOpen ? "translate-x-0" : "-translate-x-full"} md:static md:translate-x-0`}
-        aria-label="Sidebar Navigation"
-        style={{ backgroundColor: "#ffffff" }}
-      >
-        <div className="px-6 py-8 flex flex-col h-full">
-          <RouterLink
-            to="/dashboard"
-            className="text-sm font-medium text-gray-600 hover:text-black mb-8 inline-block select-none"
-            onClick={onClose}
-          >
-            &larr; Back to App
-          </RouterLink>
-         <p className="font-semibold text-xl mb-10 select-none">{userName || ""}</p>
-          <ul className="flex-grow space-y-3">
-            {navItems.map(({ key, label, href }) => (
-              <li key={key}>
-                <RouterLink
-                  to={href}
-                  className={`block px-3 py-2 rounded-lg font-medium text-sm ${
-                    activeKey === key
-                      ? "bg-black text-white"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-black"
-                  }`}
-                  onClick={() => {
-                    onChange(key);
-                    onClose();
-                  }}
-                >
-                  {label}
-                </RouterLink>
-              </li>
-            ))}
-          </ul>
-           {/* Logout Button */}
-        <button
-          onClick={onLogout}
-          className="mt-12 text-red-600 border border-red-600 px-4 py-2 rounded font-semibold hover:bg-red-600 hover:text-white transition"
-        >
-          Logout
-        </button>
-        </div>
-      </nav>
-    </>
-  );
-};
 
 const LinkSettingsPage = () => {
     const navigate = useNavigate();
@@ -227,9 +163,9 @@ const LinkSettingsPage = () => {
 
       {/* Main content */}
       <main
-        className="flex-1 p-4 md:p-10 bg-white m-4 md:m-10 ml-0 overflow-y-auto hide-scrollbar relative max-h-screen"
-        style={{ paddingTop: "3rem", WebkitOverflowScrolling: "touch" }}
-      >
+  className="flex-1 p-4 md:p-10 bg-white m-4 md:m-10 ml-0 md:ml-64 overflow-y-auto hide-scrollbar relative max-h-screen"
+  style={{ paddingTop: "3rem", WebkitOverflowScrolling: "touch" }}
+>
         <div className="max-w-3xl mx-auto">
           {/* Page Header */}
           <h1 className="text-lg font-medium mb-8 select-none">Link Settings</h1>

@@ -1,37 +1,38 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
-import Register from "./pages/Register"; // make sure this file exists
+import Register from "./pages/Register";
 import { app, auth, db } from '/src/firebase.js';
 import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 import ProfilePage from "./pages/ProfileSettingsPage";
-import LinkSettingsPage from "./pages/LinkSettingsPage"; // make sure this file exists
-import NotificationsPage from "./pages/NotificationsPage"; // make sure this file exists
-import DigitalCardEditor from "./pages/DigitalCardEditor"; // make sure this file exists
-
-
+import LinkSettingsPage from "./pages/LinkSettingsPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import DigitalCardEditor from "./pages/DigitalCardEditor";
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Login />} />         {/* default route */}
-        <Route path="/login" element={<Login />} />    {/* login route */}
-        <Route path="/register" element={<Register />} /> {/* register route */}
-        <Route path="/dashboard" element={<Dashboard />} /> {/* register route */}
+        <Route path="/" element={<Login />} /> {/* Default route */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/NotificationsPage" element={<NotificationsPage />} />
         <Route path="/LinkSettingsPage" element={<LinkSettingsPage />} />
         <Route path="/ProfileSettingsPage" element={<ProfilePage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-       
-        <Route path="/DigitalCardEditor" element={< DigitalCardEditor/>} />
+        
+        {/* Digital Card Editor (multi-card support) */}
+        <Route path="/DigitalCardEditor" element={<DigitalCardEditor />} />
+        <Route path="/DigitalCardEditor/:cardId" element={<DigitalCardEditor />} />
+
+        {/* Optionally, redirect lower-case "digital-card-editor" to PascalCase */}
+        {/* <Route path="/digital-card-editor" element={<Navigate to="/DigitalCardEditor" />} /> */}
+        {/* <Route path="/digital-card-editor/:cardId" element={<DigitalCardEditor />} /> */}
       </Routes>
     </Router>
   );
 }
 
 export default App;
-
-
-
