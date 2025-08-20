@@ -30,12 +30,16 @@ const COLOR_OPTIONS = [
   "#f06292", "#e57373", "#263238", "#ffffff"
 ];
 const PRESET_ACTIONS = [
-  { label: "JCH Demo", url: "", icon: ICONS.custom },
-  { label: "My Contact Details", url: "", icon: ICONS.custom },
-  { label: "Share your details with me", url: "", icon: ICONS.custom },
-  { label: "Book a Meeting", url: "", icon: ICONS.custom },
-  { label: "The Smart Business Card", url: "", icon: ICONS.website },
-  { label: "Media Production", url: "", icon: ICONS.website }
+  { label: "My Website", url: "", icon: ICONS.custom },
+  { label: "My Contact Details", url: "", icon: ICONS.custom, modal: true },
+  { label: "Share your details with me", url: "", icon: ICONS.custom, modal: true },
+  { label: "Book a Meeting", url: "", icon: ICONS.custom, modal: true },
+ 
+];
+const MODAL_LABELS = [
+  "my contact details",
+  "share your details with me",
+  "book a meeting"
 ];
 
 function getCroppedImg(imageSrc, area) {
@@ -97,10 +101,10 @@ function DigitalCardPreview({
 
             <a href="mailto:${email}" style="color:#1769aa;word-break:break-all;text-decoration:none">${email}</a>
           </div>
-          ${profile.phone ? `
+          ${cellNumber? `
             <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
               <span style="color:#1769aa;">${FaPhone({size:15}).props.children}</span>
-              <a href="tel:${profile.phone }" style="color:#1769aa;word-break:break-all;text-decoration:none">${profile.phone }</a>
+              <a href="tel:${cellNumber }" style="color:#1769aa;word-break:break-all;text-decoration:none">${profile.phone }</a>
             </div>
           ` : ""}
           ${address ? `
@@ -289,75 +293,67 @@ function DigitalCardPreview({
           <a href={socials.whatsapp} className="text-white hover:text-green-300" target="_blank" rel="noopener noreferrer"><FaWhatsapp size={22} /></a>
         )}
       </div>
-      <div className="flex flex-col gap-3 w-full mb-4 mt-2">
+    <div className="flex flex-col gap-3 w-full mb-4 mt-2">
   {(actions || []).map((action, idx) => {
-    // My Contact Details
-    if (
-      (action.label?.toLowerCase && action.label.toLowerCase() === "my contact details") ||
-      action.label === "My Contact Details"
-    ) {
+    const isModalAction = !!action.modal;
+    const label = action.label?.toLowerCase() || "";
+
+    // My Contact Details (modal)
+    if (isModalAction && label.includes("contact")) {
       return (
         <button
           key={idx}
-            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-  style={{ color: buttonLabelColor, textDecoration: "none" }}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
           onClick={handleShowContactDetails}
         >
           {action.icon || <FaLink />}
-          <span className="truncate">{action.label || action.url}</span>
+          <span className="truncate">{action.label}</span>
         </button>
       );
     }
 
-    // Share Your Details With Me
-    if (
-      (action.label?.toLowerCase && action.label.toLowerCase() === "share your details with me") ||
-      action.label === "Share your details with me"
-    ) {
+    // Share Your Details With Me (modal)
+    if (isModalAction && label.includes("share")) {
       return (
         <button
           key={idx}
-            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-  style={{ color: buttonLabelColor, textDecoration: "none" }}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
           onClick={handleShareDetailsModal}
         >
           {action.icon || <FaLink />}
-          <span className="truncate">{action.label || action.url}</span>
+          <span className="truncate">{action.label || "Share your details with me"}</span>
         </button>
       );
     }
 
-    // Book a Meeting: show Calendly if present, else Request a Meeting modal
-    if (
-      (action.label?.toLowerCase && action.label.toLowerCase() === "book a meeting") ||
-      action.label === "Book a Meeting"
-    ) {
+    // Book a Meeting: Calendly link or modal
+    if (isModalAction && label.includes("meeting")) {
       if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
-        // Has Calendly: show as link
         return (
           <a
             key={idx}
             href={profile.calendlyLink}
             target="_blank"
             rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-  style={{ color: buttonLabelColor, textDecoration: "none" }}
+            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+            style={{ color: buttonLabelColor, textDecoration: "none" }}
           >
             {action.icon || <FaLink />}
-            <span className="truncate">{action.label || action.url}</span>
+            <span className="truncate">{action.label || "Book a Meeting"}</span>
           </a>
         );
       } else {
-        // No Calendly: open custom request modal
         return (
           <button
             key={idx}
-              className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-  style={{ color: buttonLabelColor, textDecoration: "none" }}
+            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+            style={{ color: buttonLabelColor, textDecoration: "none" }}
             onClick={handleRequestMeetingModal}
           >
             {action.icon || <FaLink />}
-            <span className="truncate">Request a Meeting</span>
+            <span className="truncate">{action.label || "Request a Meeting"}</span>
           </button>
         );
       }
@@ -370,8 +366,8 @@ function DigitalCardPreview({
         href={action.url || "#"}
         target={action.url ? "_blank" : undefined}
         rel="noopener noreferrer"
-          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-  style={{ color: buttonLabelColor, textDecoration: "none" }}
+        className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+        style={{ color: buttonLabelColor, textDecoration: "none" }}
       >
         {action.icon || <FaLink />}
         <span className="truncate">{action.label || action.url}</span>
@@ -379,6 +375,7 @@ function DigitalCardPreview({
     );
   })}
 </div>
+
 
   {profile.buttonLabel && (
   <button
@@ -404,9 +401,7 @@ const [cardCreatedAt, setCardCreatedAt] = useState(null);
 
 
 useEffect(() => {
-  async function 
-  
-  fetchCard() {
+  async function fetchCard() {
     // If new card, reset to blank/default fields
     if (!cardId || cardId === "new") {
       setProfile({
@@ -420,19 +415,26 @@ useEffect(() => {
         email: "",
         whatsapp: "",
         youtube: "",
-        calendlyLink:""
+        calendlyLink: ""
       });
       setCardColor("#1a237e");
+      setFontColor("#ffffff");
+      setButtonLabelColor("#ffffff");
       setActions([...PRESET_ACTIONS]);
       setCardName("");
+      setCardCreatedAt(null);
       return;
     }
+
     // Otherwise load the card from Firestore
     try {
       const snap = await getDoc(doc(db, "cards", cardId));
       if (snap.exists()) {
-  const data = snap.data();
-  setProfile({ name: data.name || "",
+        const data = snap.data();
+        console.log("Loaded actions from Firestore:", data.actions);
+
+        setProfile({
+          name: data.name || "",
           company: data.company || "",
           jobTitle: data.jobTitle || "",
           bio: data.bio || "",
@@ -442,24 +444,34 @@ useEffect(() => {
           email: data.email || "",
           whatsapp: data.whatsapp || "",
           calendlyLink: data.calendlyLink || "",
-          youtube: data.youtube || ""}); // ...your code
-          
-  setCardColor(data.cardColor || "#1a237e");
-  setFontColor(data.fontColor || "#ffffff"); // <--- add this
-  setButtonLabelColor(data.buttonLabelColor || "#ffffff"); // <-
-  setActions(Array.isArray(data.actions) && data.actions.length > 0 ? data.actions : [...PRESET_ACTIONS]);
-  setCardName(data.cardName || "");
-  setCardCreatedAt(data.createdAt || null); // <-- Add this
-}
-
-    
+          youtube: data.youtube || ""
+        });
+        setCardName(data.cardName || "");
+        setCardCreatedAt(data.createdAt || null);
+        setCardColor(data.cardColor || "#1a237e");
+        setFontColor(data.fontColor || "#ffffff");
+        setButtonLabelColor(data.buttonLabelColor || "#ffffff");
+        // PATCH: Only load what was saved! (Set modal:true for special labels)
+        setActions(
+          Array.isArray(data.actions)
+            ? data.actions.map(a => {
+                const label = a.label?.trim().toLowerCase() || "";
+                return MODAL_LABELS.includes(label)
+                  ? { ...a, modal: true }
+                  : a;
+              })
+            : []
+        );
+      }
     } catch (e) {
-   
+      console.error("Error loading card:", e);
+      // Optionally show a toast or alert here
     }
   }
+
   fetchCard();
-  // Only runs when cardId in URL changes
 }, [cardId]);
+
 
 
   useEffect(() => {
@@ -504,7 +516,7 @@ useEffect(() => {
     const snapshot = await getDoc(docRef);
     if (snapshot.exists()) {
       const user = snapshot.data();
-      if (!isEditMode) { // Only set defaults for new card
+       if (!isEditMode) { // Only set defaults for new card
         setProfile(prev => ({
           ...prev,
           name: user.name || "",
@@ -523,9 +535,10 @@ useEffect(() => {
          setfontColor(user.fontColor || "#1a237e");
         setButtonLabelColor(user.buttonLabelColor || "#000000");
         setActions(Array.isArray(user.actions) && user.actions.length > 0
-          ? user.actions
-          : [...PRESET_ACTIONS]);
-      }
+    ? user.actions
+    : [...PRESET_ACTIONS]);
+  // ...other profile colors, etc.
+}
     }
   });
   return () => unsub();
@@ -586,6 +599,105 @@ async function handleCropConfirm() {
 
 
 async function handleSave() {
+const patterns = {
+  whatsapp: /^https:\/\/wa\.me\/\d{6,}$/,
+  youtube: /^https:\/\/(www\.)?(youtube\.com|youtu\.be)\/\S+/,
+  calendly: /^https:\/\/calendly\.com\/[a-zA-Z0-9_\-\/]+$/,
+  facebook: /^https:\/\/(www\.)?facebook\.com\/\S+$/,
+  linkedin: /^https:\/\/(www\.)?linkedin\.com\/\S+$/,
+  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  website: /^https?:\/\/\S+\.\S+/
+};
+
+    if (profile.linkedin && !patterns.linkedin.test(profile.linkedin.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid LinkedIn link", text: "LinkedIn link must start with https://linkedin.com/" }); return;
+}
+if (profile.youtube && !patterns.youtube.test(profile.youtube.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid YouTube link", text: "YouTube link must start with https://youtube.com/ or https://youtu.be/" }); return;
+}
+if (profile.whatsapp && !patterns.whatsapp.test(profile.whatsapp.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid WhatsApp link", text: "WhatsApp link must be like https://wa.me/123456789" }); return;
+}
+if (profile.calendlyLink && !patterns.calendly.test(profile.calendlyLink.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid Calendly link", text: "Calendly link must be like https://calendly.com/username" }); return;
+}
+if (profile.facebook && !patterns.facebook.test(profile.facebook.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid Facebook link", text: "Facebook link must start with https://facebook.com/" }); return;
+}
+if (profile.email && !patterns.email.test(profile.email.trim())) {
+  Swal.fire({ icon: "warning", title: "Invalid Email Address", text: "Please enter a valid email address (not a mailto: link)." }); return;
+}
+const hasEmptyLabel = actions.some(a => !a.label || !a.label.trim());
+if (hasEmptyLabel) {
+  Swal.fire({
+    icon: "warning",
+    title: "Button label is required for each action",
+    text: "Please provide a label for every action button."
+  });
+  return;
+}
+
+for (const a of actions) {
+  const label = a.label?.trim().toLowerCase() || "";
+  const url = a.url?.trim() || "";
+
+  // These don't require link or validation
+const isModalAction = !!a.modal;
+
+  // If LINK IS PRESENT and NOT a modal action: always validate!
+  if (url && !isModalAction) {
+    if (label.includes("whatsapp")) {
+      if (!patterns.whatsapp.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid WhatsApp link", text: "WhatsApp link must be like https://wa.me/123456789" }); return;
+      }
+    } else if (label.includes("youtube")) {
+      if (!patterns.youtube.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid YouTube link", text: "YouTube link must start with https://youtube.com/ or https://youtu.be/" }); return;
+      }
+    } else if (label.includes("calendly")) {
+      if (!patterns.calendly.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid Calendly link", text: "Calendly link must be like https://calendly.com/username" }); return;
+      }
+    } else if (label.includes("facebook")) {
+      if (!patterns.facebook.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid Facebook link", text: "Facebook link must start with https://facebook.com/" }); return;
+      }
+    } else if (label.includes("linkedin")) {
+      if (!patterns.linkedin.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid LinkedIn link", text: "LinkedIn link must start with https://linkedin.com/" }); return;
+      }
+    } else if (label.includes("email")) {
+      if (!patterns.email.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid Email link", text: "Email link must start with mailto: and have a valid email address." }); return;
+      }
+    } else {
+      if (!patterns.website.test(url)) {
+        Swal.fire({ icon: "warning", title: "Invalid link", text: "Link must start with http:// or https:// and be a valid URL."  }); return;
+      }
+    }
+  }
+
+  // For actions that REQUIRE a link (not social, not modal): must be filled and valid
+  const isRequired = a.label && !isModalAction && !(
+    label.includes("whatsapp") ||
+    label.includes("youtube") ||
+    label.includes("calendly") ||
+    label.includes("facebook") ||
+    label.includes("linkedin") ||
+    label.includes("email")
+  );
+  if (isRequired && !url) {
+    Swal.fire({
+      icon: "warning",
+      title: "Please enter a link for every action button.",
+      text: "All standard action buttons must have a valid URL except 'My Contact Details', 'Book a Meeting', 'Share your details with me', and recognized social links."
+    });
+    return;
+  }
+}
+
+
+
   const curr = auth.currentUser;
   if (!curr) return alert("Not logged in.");
   if (!cardName.trim()) {
@@ -599,7 +711,8 @@ async function handleSave() {
       actions: actions.map(a => ({
         label: a.label,
         url: a.url,
-        iconType: a.iconType || "custom"
+        iconType: a.iconType || "custom",
+          modal: !!a.modal
       })),
       cardColor,
        fontColor,
@@ -840,58 +953,120 @@ function getIconTypeFromAction(action) {
     aria-label="Button label color"
   />
 </div>
+<div className="w-full">
+  <h3 className="font-semibold text-center mb-2">Links & Actions</h3>
+ {actions.map((a, idx) => {
+  const isModalAction = !!a.modal;
+  const label = a.label?.trim().toLowerCase() || "";
+  const isRequired = idx === 0; // first link required
 
-            <div className="w-full">
-              <h3 className="font-semibold text-center mb-2">Links & Actions</h3>
-              {actions.map((a, idx) => (
-                <div key={idx} className="mb-4">
-                  <label className="block text-xs font-semibold mb-1" htmlFor={`label-input-${idx}`}>Button Label</label>
-                  <input
-                    id={`label-input-${idx}`}
-                    className="w-full border-b border-blue-100 px-3 py-2 outline-none mb-2"
-                    value={a.label}
-                    onChange={e => updateAction(idx, "label", e.target.value)}
-                    placeholder="Button Label"
-                    autoComplete="off"
-                    maxLength={44}
-                  />
-                  <label className="block text-xs font-semibold mb-1" htmlFor={`url-input-${idx}`}>Link</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id={`url-input-${idx}`}
-                      className="flex-1 border-b border-blue-100 px-3 py-2 outline-none overflow-x-auto whitespace-nowrap scrollbar-thin"
-                      style={{ minWidth: 0, WebkitOverflowScrolling: "touch" }}
-                      value={a.url}
-                      onChange={e => updateAction(idx, "url", e.target.value)}
-                      placeholder="Link (optional)"
-                      autoComplete="off"
-                      maxLength={400}
-                    />
-                    <button
-                      className="border border-gray-200 bg-red-100 rounded px-3 py-2 text-red-600 flex-shrink-0"
-                      onClick={() => removeAction(idx)}
-                      type="button"
-                      aria-label="Remove">
-                      <FaTrash />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <button
-                className="mt-1 w-full rounded-2xl bg-blue-600 text-white font-bold py-2 hover:bg-blue-700 transition"
-                type="button"
-                onClick={addAction}
-              >Add Action</button>
-            </div>
+  return (
+    <div
+      key={idx}
+      className="border border-gray-200 rounded-xl p-4 space-y-2 bg-white shadow-sm"
+    >
+      <label className="block text-xs font-semibold mb-1" htmlFor={`label-input-${idx}`}>
+        Button Label
+      </label>
+      <input
+        id={`label-input-${idx}`}
+        type="text"
+        className="w-full border-b border-blue-100 px-3 py-2 outline-none"
+        value={a.label}
+        onChange={e => updateAction(idx, "label", e.target.value)}
+        placeholder="Enter button label"
+        autoComplete="on"
+        maxLength={100}
+      />
+
+      {isModalAction ? (
+        <div className="text-xs text-gray-500 mt-2">
+          This button will always open a modal — no link required.
+        </div>
+      ) : (
+        <>
+          <label
+            className="block text-xs font-semibold mb-1 mt-2"
+            htmlFor={`url-input-${idx}`}
+          >
+            Link
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id={`url-input-${idx}`}
+              type="url"
+              required={isRequired}
+              className="w-full border-b border-blue-100 px-3 py-2 outline-none overflow-x-auto whitespace-nowrap scrollbar-thin"
+              value={a.url}
+              onChange={e => {
+                let val = e.target.value;
+                // WhatsApp special handling → only numbers
+                if (label.includes("whatsapp")) {
+                  const raw = val.replace(/\D/g, "");
+                  val = raw ? `https://wa.me/${raw}` : "";
+                }
+                updateAction(idx, "url", val);
+              }}
+              placeholder={
+                label.includes("whatsapp")
+                  ? "Enter your number with country code (e.g. 27831234567)"
+                  : label.includes("youtube")
+                  ? "https://youtube.com/..."
+                  : label.includes("facebook")
+                  ? "https://facebook.com/..."
+                  : label.includes("linkedin")
+                  ? "https://linkedin.com/..."
+                  : "https://example.com"
+              }
+              autoComplete="off"
+              maxLength={400}
+            />
+            <button
+              className="border border-gray-200 bg-red-100 rounded px-3 py-2 text-red-600 flex-shrink-0"
+              onClick={() => removeAction(idx)}
+              type="button"
+              aria-label="Remove"
+            >
+              <FaTrash />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+})}
+
+  <button
+    className="mt-1 w-full rounded-2xl bg-blue-600 text-white font-bold py-2 hover:bg-blue-700 transition"
+    type="button"
+    onClick={addAction}
+  >Add Action</button>
+</div>
+
+
             <div className="w-full flex flex-col gap-2 mb-6 mt-6">
               <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.linkedin}
                      placeholder="LinkedIn Profile URL" onChange={e => updateProfileField("linkedin", e.target.value)} />
               <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.youtube}
                      placeholder="YouTube Channel URL" onChange={e => updateProfileField("youtube", e.target.value)} />
-              <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.email}
-                     placeholder="Email" onChange={e => updateProfileField("email", e.target.value)} type="email" />
-              <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.whatsapp}
-                     placeholder="WhatsApp Link (https://wa.me/…)" onChange={e => updateProfileField("whatsapp", e.target.value)} />
+            <input className="w-full border-b border-blue-100 py-2 outline-none text-center" 
+       value={profile.email}
+       placeholder="Email" 
+       onChange={e => updateProfileField("email", e.target.value)} 
+       type="email" />
+
+              <input
+  className="w-full border-b border-blue-100 py-2 outline-none text-center"
+  value={profile.whatsapp.replace("https://wa.me/", "")} // show only number
+  placeholder="Enter your number with country code (no spaces/special chars)"
+  onChange={e => {
+    // Remove non-digits
+    const raw = e.target.value.replace(/\D/g, "");
+    // Save as full wa.me link in profile
+    updateProfileField("whatsapp", raw ? `https://wa.me/${raw}` : "");
+  }}
+/>
+
                      
               <input
     type="url"
