@@ -11,7 +11,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import DigitalCardEditor from "./pages/DigitalCardEditor";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ContactBookPage from "./pages/ContactBookPage";
-
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   return (
@@ -30,7 +30,7 @@ function App() {
         {/* Digital Card Editor (multi-card support) */}
         <Route path="/DigitalCardEditor" element={<DigitalCardEditor />} />
         <Route path="/DigitalCardEditor/:cardId" element={<DigitalCardEditor />} />
-
+      <Route path="/admin" element={<AdminDashboard />} />
 
         {/* Optionally, redirect lower-case "digital-card-editor" to PascalCase */}
         {/* <Route path="/digital-card-editor" element={<Navigate to="/DigitalCardEditor" />} /> */}

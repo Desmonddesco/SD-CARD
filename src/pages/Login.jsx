@@ -16,6 +16,7 @@ const LoginForm = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -88,14 +89,37 @@ const LoginForm = () => {
               className="w-full border border-gray-300 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-black"
               required
             />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full border border-gray-300 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-black"
-              required
-            />
+            <div className="relative">
+  <input
+    type={showPassword ? "text" : "password"}
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    placeholder="Password"
+    className="w-full border border-gray-300 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-black pr-12"
+    required
+  />
+  <button
+    type="button"
+    onClick={() => setShowPassword(p => !p)}
+    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-black focus:outline-none"
+    tabIndex={-1}
+    aria-label={showPassword ? "Hide password" : "Show password"}
+  >
+    {showPassword ? (
+      // Eye-slash SVG icon
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width={22} height={22}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5.523 0-10-6-10-7s4.477-7 10-7c2.158 0 4.173.752 5.875 2.025m2.122 2.122A16.978 16.978 0 0122 12.001c0 1-4.477 7-10 7-1.113 0-2.186-.131-3.204-.375m-2.186-2.069A16.978 16.978 0 012 12.001c0-1 4.477-7 10-7 1.113 0 2.186.131 3.204.375" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-4 4m0 0l-4-4m4 4V10" />
+      </svg>
+    ) : (
+      // Eye SVG icon
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width={22} height={22}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
+      </svg>
+    )}
+  </button>
+</div>
            
 
             <p className="text-right text-sm">

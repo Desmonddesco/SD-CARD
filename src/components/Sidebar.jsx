@@ -100,7 +100,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           Settings
         </button>
         <a
-          href="https://app.v1ce.co/help"
+          href=""
           className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
           target="_blank"
           rel="noopener noreferrer"
@@ -109,7 +109,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           Help Center
         </a>
         <a
-          href="https://app.v1ce.co/help/feature-requests"
+          href=""
           className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
           target="_blank"
           rel="noopener noreferrer"
@@ -118,7 +118,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           Feature Requests
         </a>
         <a
-          href="https://app.v1ce.co/help/roadmap"
+          href=""
           className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
           target="_blank"
           rel="noopener noreferrer"
@@ -171,9 +171,19 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
       } else if (item === "Analytics") {
         navigate("/analytics");
       } else if (item === "Tap/NFC Cards") {
-        navigate("/nfc-cards");
+         Swal.fire({
+    icon: "info",
+    title: "Page Under Development",
+    text: `The page "${item}" can't be opened yet. It is still under development.`,
+    confirmButtonText: "OK"
+  });
       } else if (item === "Networking Toolkit") {
-        navigate("/networking-toolkit");
+         Swal.fire({
+    icon: "info",
+    title: "Page Under Development",
+    text: `The page "${item}" can't be opened yet. It is still under development.`,
+    confirmButtonText: "OK"
+  });
       } else if (item === "Contact Book") {
         navigate("/contacts");
       } else {

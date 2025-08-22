@@ -41,6 +41,8 @@ const MODAL_LABELS = [
   "share your details with me",
   "book a meeting"
 ];
+// --- Helper Button ---
+
 
 function getCroppedImg(imageSrc, area) {
   return new Promise((resolve, reject) => {
@@ -76,62 +78,131 @@ function DigitalCardPreview({
   style = {},
   containerProps = {}
 }) {
-// Handler for My Contact Details modal
-  function handleShowContactDetails(e) {
-    e.preventDefault();
-    const isMobile = window.innerWidth < 540;
-    const modalWidth = isMobile ? "94vw" : 370;
+function handleShowContactDetails(e) {
+  e.preventDefault();
+  const isMobile = window.innerWidth < 540;
+  const modalWidth = isMobile ? "94vw" : 370;
 
-    const cellNumber = profile.phone || profile.mobile || profile.cell || "";
-    const address = profile.address || "";
-    const linkedin = profile.linkedin || socials.linkedin || "";
-    const email = profile.email || "";
+  // Get values from profile, fallback
+  const name = profile.name || "";
+  const jobTitle = profile.jobTitle || "";
+  const company = profile.company || "";
+  const email = profile.email || "";
+  const phone = profile.phone || profile.mobile || profile.cell || "";
+  const address = profile.address || "";
+  const website = profile.website || (socials && socials.website) || "";
+  const linkedin = profile.linkedin || (socials && socials.linkedin) || "";
+console.log(profile);
+  function getContactVCF(profile) {
+  return (
+    `BEGIN:VCARD\n` +
+    `VERSION:3.0\n` +
+    `FN:${profile.name ?? ""}\n` +
+    `ORG:${profile.company ?? ""}\n` +
+    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+    (profile.website ? `URL:${profile.website}\n` : "") + 
+    (profile.email ? `EMAIL:${profile.email}\n` : "") +
+    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+    `END:VCARD`
+  );
+}
 
-    Swal.fire({
-      title: "My Contact Details",
-      html: `
-        <div style="text-align:left;font-size:15px;line-height:1.7;max-width:330px;">
-          <div style="font-weight:bold;font-size:17px;display:flex;align-items:center;gap:8px;">
-            <span style="font-size:17px;vertical-align:middle;margin-right:5px;">👤</span>
-            ${profile.name || ""}
-          </div>
-          <div style="margin-top:4px;">${profile.jobTitle ? profile.jobTitle + " · " : ""}${profile.company || ""}</div>
-          <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="color:#1769aa;">📧</span>
-
-            <a href="mailto:${email}" style="color:#1769aa;word-break:break-all;text-decoration:none">${email}</a>
-          </div>
-          ${cellNumber? `
-            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-              <span style="color:#1769aa;">${FaPhone({size:15}).props.children}</span>
-              <a href="tel:${cellNumber }" style="color:#1769aa;word-break:break-all;text-decoration:none">${profile.phone }</a>
-            </div>
-          ` : ""}
-          ${address ? `
-            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-              <span style="color:#1769aa;">${FaMapMarkerAlt({size:15}).props.children}</span>
-              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" style="color:#1769aa;word-break:break-all;text-decoration:none">
-                ${address}
-              </a>
-            </div>
-          ` : ""}
-          ${linkedin ? `
-            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-             <span style="font-size:15px;vertical-align:middle;">🔗</span>
-
-              <a href="${linkedin}" target="_blank" style="color:#1769aa;text-decoration:none">
-                LinkedIn Profile
-              </a>
-            </div>
-          ` : ""}
+function downloadContactVCF(profile) {
+  const vcf = getContactVCF(profile);
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+Swal.fire({
+  title: "My Contact Details",
+  html: `
+    <div style="text-align:left;font-size:15px;line-height:1.7;max-width:330px;">
+      <div style="font-weight:bold;font-size:17px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:17px;vertical-align:middle;margin-right:5px;">👤</span>
+        ${name}
+      </div>
+      ${(jobTitle || company) ? `
+        <div style="margin-top:4px;">
+          ${jobTitle ? jobTitle + " · " : ""}${company}
         </div>
-      `,
-      showCloseButton: true,
-      showConfirmButton: false,
-      width: modalWidth,
-      padding: '1.5em'
-    });
-  }
+      ` : ""}
+      ${website ? `
+  <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+    <span style="color:#1769aa;">🌐</span>
+    <a href="${website}" target="_blank" style="color:#1769aa;word-break:break-all;text-decoration:none">
+      ${website}
+    </a>
+  </div>
+      ` : ""}
+      ${email ? `
+        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+          <span style="color:#1769aa;">📧</span>
+          <a href="mailto:${email}" style="color:#1769aa;word-break:break-all;text-decoration:none">${email}</a>
+        </div>
+      ` : ""}
+      ${phone ? `
+        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+          <span style="color:#1769aa;">📞</span>
+          <a href="tel:${phone}" style="color:#1769aa;word-break:break-all;text-decoration:none">${phone}</a>
+        </div>
+      ` : ""}
+      ${address ? `
+        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+          <span style="color:#1769aa;">📍</span>
+          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" style="color:#1769aa;word-break:break-all;text-decoration:none">
+            ${address}
+          </a>
+        </div>
+      ` : ""}
+      ${linkedin ? `
+        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:15px;vertical-align:middle;">🔗</span>
+          <a href="${linkedin}" target="_blank" style="color:#1769aa;text-decoration:none">
+            LinkedIn Profile
+          </a>
+        </div>
+      ` : ""}
+     <button id="saveVcfBtn"
+  style="
+    display:block;
+    margin:24px auto 0 auto;
+    background:#1565c0;
+    color:white;
+    font-weight:600;
+    border:none;
+    border-radius:7px;
+    padding:10px 22px;
+    cursor:pointer;
+    font-size:15px;
+    box-shadow:0 2px 8px rgba(21,101,192,0.07);
+    transition:background 0.2s;
+  "
+  onmouseover="this.style.background='#0d47a1';"
+  onmouseout="this.style.background='#1565c0';"
+>
+  Download Contact as VCF
+</button>
+
+    </div>
+  `,
+  showCloseButton: true,
+  showConfirmButton: false,
+  width: modalWidth,
+  padding: '1.5em',
+   didOpen: () => {
+  const btn = Swal.getHtmlContainer().querySelector('#saveVcfBtn');
+  if (btn) btn.onclick = () => downloadContactVCF(profile);
+}
+
+});
+}
+
 
 
   function handleRequestMeetingModal(e) {
@@ -389,7 +460,56 @@ function DigitalCardPreview({
   );
 }
 
+function SaveContactCSVButton({ contact }) {
+ function getContactVCF(profile) {
+  return (
+    `BEGIN:VCARD\n` +
+    `VERSION:3.0\n` +
+    `FN:${profile.name ?? ""}\n` +
+    `ORG:${profile.company ?? ""}\n` +
+    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+    (profile.website ? `URL:${profile.website}\n` : "") +
+    (profile.email ? `EMAIL:${profile.email}\n` : "") +
+    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+    `END:VCARD`
+  );
+}
 
+function downloadContactVCF(profile) {
+  const vcf = getContactVCF(profile);
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+
+ function downloadContactVCF(profile) {
+  const vcf = getContactVCF(profile);
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+  return (
+    <button
+      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mt-3"
+      disabled={!contact}
+      onClick={() => downloadContactCSV(contact)}
+    >
+      Save Contact (CSV)
+    </button>
+  );
+}
 export default function DigitalCardEditor() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
@@ -404,19 +524,22 @@ useEffect(() => {
   async function fetchCard() {
     // If new card, reset to blank/default fields
     if (!cardId || cardId === "new") {
-      setProfile({
-        name: "",
-        company: "",
-        jobTitle: "",
-        bio: "",
-        buttonLabel: "",
-        profilePhoto: "",
-        linkedin: "",
-        email: "",
-        whatsapp: "",
-        youtube: "",
-        calendlyLink: ""
-      });
+     setProfile({
+  name: "",
+  company: "",
+  jobTitle: "",
+  bio: "",
+  buttonLabel: "",
+  profilePhoto: "",
+  linkedin: "",
+  email: "",
+  whatsapp: "",
+  calendlyLink: "",
+  youtube: "",
+  phone: "",
+  address: "",
+  website: ""
+});
       setCardColor("#1a237e");
       setFontColor("#ffffff");
       setButtonLabelColor("#ffffff");
@@ -434,18 +557,21 @@ useEffect(() => {
         console.log("Loaded actions from Firestore:", data.actions);
 
         setProfile({
-          name: data.name || "",
-          company: data.company || "",
-          jobTitle: data.jobTitle || "",
-          bio: data.bio || "",
-          buttonLabel: data.buttonLabel || "",
-          profilePhoto: data.profilePhoto || "",
-          linkedin: data.linkedin || "",
-          email: data.email || "",
-          whatsapp: data.whatsapp || "",
-          calendlyLink: data.calendlyLink || "",
-          youtube: data.youtube || ""
-        });
+  name: data.name || "",
+  company: data.company || "",
+  jobTitle: data.jobTitle || "",
+  bio: data.bio || "",
+  buttonLabel: data.buttonLabel || "",
+  profilePhoto: data.profilePhoto || "",
+  linkedin: data.linkedin || "",
+  email: data.email || "",
+  whatsapp: data.whatsapp || "",
+  calendlyLink: data.calendlyLink || "",
+  youtube: data.youtube || "",
+  phone: data.phone || "",
+  address: data.address || "",
+  website: data.website || ""
+});
         setCardName(data.cardName || "");
         setCardCreatedAt(data.createdAt || null);
         setCardColor(data.cardColor || "#1a237e");
@@ -493,7 +619,11 @@ useEffect(() => {
     email: "",
     whatsapp: "",
     youtube: "",
-    calendlyLink: ""
+    calendlyLink: "",
+    phone: "",
+    address: "",
+    website: ""
+    
   });
   const [actions, setActions] = useState([...PRESET_ACTIONS]);
   const [cardColor, setCardColor] = useState("#1a237e");
@@ -530,6 +660,9 @@ useEffect(() => {
           whatsapp: user.whatsapp || "",
           youtube: user.youtube || "",
           calendlyLink: user.calendlyLink || "",
+          phone: user.phone || "",
+          address: user.address || "",
+          website: user.website || ""
         }));
         setCardColor(user.cardColor || "#1a237e");
          setfontColor(user.fontColor || "#1a237e");
@@ -919,6 +1052,31 @@ function getIconTypeFromAction(action) {
                      value={profile.jobTitle} onChange={e => updateProfileField("jobTitle", e.target.value)} placeholder="Job Title" maxLength={44} />
               <input className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400"
                      value={profile.company} onChange={e => updateProfileField("company", e.target.value)} placeholder="Company" maxLength={44} />
+                     <input
+  type="text"
+  name="phone"
+  value={profile.phone}
+  onChange={e => setProfile(prev => ({ ...prev, phone: e.target.value }))}
+  placeholder="Phone Number"
+  style={{ display: "none" }}
+/>
+<input
+  type="text"
+  name="address"
+  value={profile.address}
+  onChange={e => setProfile(prev => ({ ...prev, address: e.target.value }))}
+  placeholder="Address"
+  style={{ display: "none" }}
+/>
+<input
+  type="text"
+  name="website"
+  value={profile.website}
+  onChange={e => setProfile(prev => ({ ...prev, website: e.target.value }))}
+  placeholder="website"
+  style={{ display: "none" }}
+/>
+
               <textarea className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400 resize-none"
                 rows={2} maxLength={110} value={profile.bio} onChange={e => updateProfileField("bio", e.target.value)} placeholder="Short bio" />
             </div>

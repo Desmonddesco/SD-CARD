@@ -28,37 +28,112 @@ function detectModalType(action) {
   if (MODAL_KEYWORDS.meeting.some(word => lower.includes(word))) return "meeting";
   return "modal";
 }
+function getContactVCF(profile) {
+  return (
+    `BEGIN:VCARD\n` +
+    `VERSION:3.0\n` +
+    `FN:${profile.name ?? ""}\n` +
+    `ORG:${profile.company ?? ""}\n` +
+    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+    (profile.website ? `URL:${profile.website}\n` : "") + 
+    (profile.email ? `EMAIL:${profile.email}\n` : "") +
+    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+    `END:VCARD`
+  );
+}
 
+function downloadContactVCF(profile) {
+  const vcf = getContactVCF(profile);
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 function handleShowContactDetails(profile) {
+  // Compose info safely
+  const { name, jobTitle, company, email, phone, address, website } = profile;
+
   Swal.fire({
     title: "My Contact Details",
     html: `
-      <div style="text-align:left;font-size:15px;">
+      <div style="text-align:left;font-size:15px;line-height:1.7;max-width:330px;">
         <div style="font-weight:bold;font-size:17px;display:flex;align-items:center;gap:8px;">
           <span style="font-size:17px;vertical-align:middle;margin-right:5px;">👤</span>
-          ${profile.name || ""}
+          ${name || ""}
         </div>
-        <div style="margin-top:4px;">${profile.jobTitle ? profile.jobTitle + " · " : ""}${profile.company || ""}</div>
-        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="color:#1769aa;">📧</span>
-          <a href="mailto:${profile.email || ""}" style="color:#1769aa;">${profile.email || ""}</a>
-        </div>
-        ${
-          profile.phone
-            ? `<div style="margin-top:13px;">
-                <span style="color:#1769aa;">☎️</span>
-                <a href="tel:${profile.phone}" style="color:#1769aa;">${profile.phone}</a>
-              </div>`
-            : ""
-        }
+        ${(jobTitle || company) ? `
+          <div style="margin-top:4px;">
+            ${jobTitle ? jobTitle + " · " : ""}${company}
+          </div>
+        ` : ""}
+        ${website ? `
+  <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+    <span style="color:#1769aa;">🌐</span>
+    <a href="${website}" target="_blank" style="color:#1769aa;word-break:break-all;text-decoration:none">
+      ${website}
+    </a>
+  </div>
+` : ""}
+
+        ${email ? `
+          <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#1565c0;">📧</span>
+            <a href="mailto:${email}" style="color:#1565c0;word-break:break-all;text-decoration:none">${email}</a>
+          </div>
+        ` : ""}
+        ${phone ? `
+          <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#1565c0;">📞</span>
+            <a href="tel:${phone}" style="color:#1565c0;word-break:break-all;text-decoration:none">${phone}</a>
+          </div>
+        ` : ""}
+        ${address ? `
+          <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#1565c0;">📍</span>
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" style="color:#1565c0;word-break:break-all;text-decoration:none">
+              ${address}
+            </a>
+          </div>
+        ` : ""}
+        <button id="saveVcfBtn"
+  style="
+    display:block;
+    margin:24px auto 0 auto;
+    background:#1565c0;
+    color:white;
+    font-weight:600;
+    border:none;
+    border-radius:7px;
+    padding:10px 22px;
+    cursor:pointer;
+    font-size:15px;
+    box-shadow:0 2px 8px rgba(21,101,192,0.07);
+    transition:background 0.2s;
+  "
+  onmouseover="this.style.background='#0d47a1';"
+  onmouseout="this.style.background='#1565c0';"
+>
+  Download Contact as VCF
+</button>
+
       </div>
     `,
     showCloseButton: true,
     showConfirmButton: false,
     width: 350,
-    padding: '1.5em'
+    padding: '1.5em',
+   didOpen: () => {
+  const btn = Swal.getHtmlContainer().querySelector('#saveVcfBtn');
+  if (btn) btn.onclick = () => downloadContactVCF(profile);
+}
   });
 }
+
 
 function handleShareDetailsModal(profile) {
   const isMobile = window.innerWidth < 540;
@@ -250,15 +325,16 @@ function DigitalCardPreview({
           // Render modal actions by type
           if (modalType === "contact") {
             return (
-              <button
-                key={idx}
-                className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-                style={{ color: buttonLabelColor, textDecoration: "none" }}
-                onClick={() => handleShowContactDetails(profile)}
-              >
-                {Icon}
-                <span className="truncate">{label}</span>
-              </button>
+             <button
+  key={idx}
+  className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+  style={{ color: buttonLabelColor, textDecoration: "none" }}
+  onClick={() => handleShowContactDetails(profile)}
+>
+  {Icon}
+  <span className="truncate">{label}</span>
+</button>
+
             );
           }
           if (modalType === "share") {

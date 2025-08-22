@@ -32,7 +32,7 @@ const NotificationsPage = () => {
   const [emailNotify, setEmailNotify] = useState(true);
   const [whatsappNotify, setWhatsappNotify] = useState(true);
 
-  const profileLink = "link.v1ce.co/twfcqusj";
+  const profileLink = "link.co/twfcqusj";
 
   useEffect(() => {
   const fetchUser = async () => {

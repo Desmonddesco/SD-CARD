@@ -30,8 +30,8 @@ const LinkSettingsPage = () => {
     const [feedback, setFeedback] = useState(""); // Both error and success
       const [feedbackError, setFeedbackError] = useState(false);
   const [linkSettings, setLinkSettings] = useState({
-    linkUrl: "link.v1ce.co/twfcqusj",
-    linkName: "link.v1ce.co/",
+    linkUrl: "link.co/twfcqusj",
+    linkName: "link.co/",
     requirePassword: false,
   });
 
@@ -197,7 +197,7 @@ const LinkSettingsPage = () => {
                 type="text"
                 value={linkSettings.linkName}
                 onChange={handleInputChange}
-                placeholder="link.v1ce.co/"
+                placeholder="link.co/"
                 className="w-full border border-black rounded px-3 py-2 focus:ring-2 focus:ring-black"
                 required
               />

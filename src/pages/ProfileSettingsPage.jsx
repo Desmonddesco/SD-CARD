@@ -27,7 +27,7 @@ const ProfilePage = () => {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(""); // Both error and success
   const [feedbackError, setFeedbackError] = useState(false);
-  const [profileLink] = useState("link.v1ce.co/twfcqusj");
+  const [profileLink] = useState("link.co/twfcqusj");
   const [emailEditMode, setEmailEditMode] = useState(false);
   const [originalEmail, setOriginalEmail] = useState("");
   const navigate = useNavigate();
