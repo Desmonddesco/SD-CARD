@@ -118,7 +118,7 @@ function handleShowContactDetails(profile) {
   onmouseover="this.style.background='#0d47a1';"
   onmouseout="this.style.background='#1565c0';"
 >
-  Download Contact as VCF
+  Save to Contacts
 </button>
 
       </div>

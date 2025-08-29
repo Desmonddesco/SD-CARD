@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   FaTrash, FaEnvelope, FaLinkedin, FaGlobe, FaLink,
-  FaWhatsapp, FaYoutube, FaPalette, FaImage, FaBars, FaTimes, FaEye, FaMapMarkerAlt, FaUser
+  FaWhatsapp, FaYoutube, FaPalette, FaImage, FaBars, FaTimes, FaEye, FaUser, FaPlus, FaChevronDown, FaChevronUp
 } from "react-icons/fa";
 import { useParams } from "react-router-dom";
 import Cropper from "react-easy-crop";
 import Swal from "sweetalert2";
 import { auth, db } from "../firebase";
-import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -16,33 +16,43 @@ import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage"
 
 
 
-
+// Icon config for social links
 const ICONS = {
-  whatsapp: <FaWhatsapp />,
-  email: <FaEnvelope />,
-  linkedin: <FaLinkedin />,
-  website: <FaGlobe />,
-  custom: <FaLink />,
-  youtube: <FaYoutube />
+  linkedin: <FaLinkedin size={22} />,
+  youtube: <FaYoutube size={22} />,
+  email: <FaEnvelope size={22} />,
+  whatsapp: <FaWhatsapp size={22} />,
+  website: <FaGlobe size={22} />,
+  custom: <FaLink size={22} />,
+  contactForm: <FaUser size={22} />,
 };
+
 const COLOR_OPTIONS = [
   "#1a237e", "#1976d2", "#64b5f6", "#81c784", "#ffe082",
   "#f06292", "#e57373", "#263238", "#ffffff"
 ];
-const PRESET_ACTIONS = [
-  { label: "My Website", url: "", icon: ICONS.custom },
-  { label: "My Contact Details", url: "", icon: ICONS.custom, modal: true },
-  { label: "Share your details with me", url: "", icon: ICONS.custom, modal: true },
-  { label: "Book a Meeting", url: "", icon: ICONS.custom, modal: true },
- 
-];
-const MODAL_LABELS = [
-  "my contact details",
-  "share your details with me",
-  "book a meeting"
-];
-// --- Helper Button ---
 
+// Action Picker Modal options
+const ACTION_TYPES = [
+  {
+    group: "Contact",
+    options: [
+      { type: "contactForm", label: "My Contact Details", desc: "Form for users to send their details", icon: <FaUser /> },
+      { type: "bookMeeting", label: "Book a Meeting", desc: "Allow users to book a meeting with you", icon: <FaUser /> },
+      { type: "shareDetails", label: "Share Your Details With Me", desc: "Users can share their info with you", icon: <FaUser /> }
+    ]
+  },
+  {
+    group: "Social",
+    options: [
+      { type: "email", label: "Email", desc: "Add your email address", icon: <FaEnvelope /> },
+      { type: "whatsapp", label: "WhatsApp", desc: "Add your WhatsApp number", icon: <FaWhatsapp /> },
+      { type: "youtube", label: "YouTube Channel", desc: "Link your YouTube", icon: <FaYoutube /> },
+      { type: "linkedin", label: "LinkedIn Profile", desc: "Link your LinkedIn", icon: <FaLinkedin /> },
+      { type: "website", label: "Website", desc: "Add your site", icon: <FaGlobe /> },
+    ]
+  }
+];
 
 function getCroppedImg(imageSrc, area) {
   return new Promise((resolve, reject) => {
@@ -65,180 +75,566 @@ function getCroppedImg(imageSrc, area) {
   });
 }
 
-// ---- CARD COMPONENT: Card auto-shrinks/grows, is scrollable on desktop -----
+// Edit fields for each type of action
+function ActionEditor({ action, onChange, onRemove, profile, cardId, setProfile }) {
+  switch (action.type) {
+case "contactForm": {
+  const [expanded, setExpanded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState(null);
+
+  // Populate fields from card profile (passed as prop) on first expand
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (expanded && !prefilledRef.current && profile) {
+      let needsUpdate = false;
+      const newAction = { ...action };
+      if (!newAction.fullName && profile.name) { newAction.fullName = profile.name; needsUpdate = true; }
+      if (!newAction.email && profile.email) { newAction.email = profile.email; needsUpdate = true; }
+      if (!newAction.phone && profile.phone) { newAction.phone = profile.phone; needsUpdate = true; }
+      if (!newAction.address && profile.address) { newAction.address = profile.address; needsUpdate = true; }
+      if (needsUpdate) {
+        prefilledRef.current = true;
+        onChange(newAction);
+      }
+    }
+    // eslint-disable-next-line
+  }, [expanded, profile]);
+
+  // Shorthand for updating local action state (for the UI/list)
+  const updateField = (key, val) => onChange({ ...action, [key]: val });
+
+  // --- THE KEY CHANGE: Save fields to the card's root fields directly ---
+ async function handleSaveContactFields() {
+  setSaving(true);
+  setSaveMsg(null);
+
+  if (!cardId) {
+    setSaveMsg("cardId not found.");
+    setSaving(false);
+    return;
+  }
+
+  // Update profile in parent so Save Card copies correct info for Firestore
+  setProfile(prev => ({
+    ...prev,
+    name: action.fullName ?? "",
+    email: action.email ?? "",
+    phone: action.phone ?? "",
+    address: action.address ?? ""
+    // more fields as you add them!
+  }));
+
+  try {
+    // Optionally update the card doc too (direct updateDoc), or let handleSave handle it globally
+     await setDoc(doc(db, "cards", cardId), {
+       name: action.fullName ?? "",
+       email: action.email ?? "",
+       phone: action.phone ?? "",
+       address: action.address ?? "",
+       updatedAt: new Date()
+     }, { merge: true });
+
+    setSaveMsg("Contact details ready to save!");
+  } catch (err) {
+    setSaveMsg("Failed to update contact details.");
+  }
+  setSaving(false);
+}
+
+  return (
+    <div className="border rounded-xl p-4 mb-4 bg-white">
+      <div
+        className="flex justify-between items-center mb-1 cursor-pointer"
+        onClick={() => setExpanded(exp => !exp)}
+      >
+        <b className="flex items-center gap-2">
+          <FaUser /> My Contact Details
+        </b>
+        <div className="flex items-center gap-2">
+          <button
+            className="pl-3 pr-1 text-xl"
+            type="button"
+            aria-label={expanded ? "Collapse" : "Expand"}
+            tabIndex={-1}
+            onClick={e => { e.stopPropagation(); setExpanded(exp => !exp); }}
+            style={{ background: "none", border: "none" }}
+          >
+            {expanded ? <FaChevronUp /> : <FaChevronDown />}
+          </button>
+          <button
+            type="button"
+            className="text-red-500"
+            onClick={e => { e.stopPropagation(); onRemove(); }}
+            style={{ background: "none", border: "none" }}
+          >
+            <FaTimes />
+          </button>
+        </div>
+      </div>
+
+      <input
+        className="w-full border-b my-1 py-1 px-2"
+        placeholder="My Contact Details"
+        value={action.label ?? ""}
+        onChange={e => updateField("label", e.target.value)}
+      />
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          <input
+            className="w-full border-b py-1 px-2"
+            placeholder="Full Name"
+            value={action.fullName ?? ""}
+            onChange={e => updateField("fullName", e.target.value)}
+          />
+          <input
+            className="w-full border-b py-1 px-2"
+            placeholder="Email"
+            value={action.email ?? ""}
+            onChange={e => updateField("email", e.target.value)}
+          />
+          <input
+            className="w-full border-b py-1 px-2"
+            placeholder="Phone Number"
+            value={action.phone ?? ""}
+            onChange={e => updateField("phone", e.target.value)}
+          />
+          <input
+            className="w-full border-b py-1 px-2"
+            placeholder="Address"
+            value={action.address ?? ""}
+            onChange={e => updateField("address", e.target.value)}
+          />
+          <button
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            disabled={saving}
+            onClick={handleSaveContactFields}
+            type="button"
+          >
+            {saving ? "Saving..." : "Save Contact Details"}
+          </button>
+          {saveMsg && <div className={`text-sm ${saveMsg.includes('fail') ? 'text-red-600' : 'text-green-600'}`}>{saveMsg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+        case "bookMeeting":
+      return (
+        <div className="border rounded-xl p-4 mb-4 bg-white">
+          <div className="flex justify-between items-center mb-1">
+            <b className="flex items-center gap-2"><FaUser /> Book a Meeting</b>
+            <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
+          </div>
+          {/* Optionally show Calendly information or allow user to set link */}
+          <input
+            className="w-full border-b my-1 py-1 px-2"
+            placeholder="Button Label"
+            value={action.label || ""}
+            onChange={e => onChange({ ...action, label: e.target.value })}
+          />
+        </div>
+      );
+
+    // --- ADD THIS: Share Your Details With Me ---
+    case "shareDetails":
+      return (
+        <div className="border rounded-xl p-4 mb-4 bg-white">
+          <div className="flex justify-between items-center mb-1">
+            <b className="flex items-center gap-2"><FaUser /> Share Your Details With Me</b>
+            <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
+          </div>
+          <input
+            className="w-full border-b my-1 py-1 px-2"
+            placeholder="Button Label"
+            value={action.label || ""}
+            onChange={e => onChange({ ...action, label: e.target.value })}
+          />
+        </div>
+      );
+      case "email":
+case "whatsapp":
+case "youtube":
+case "linkedin":
+case "website":
+  return (
+    <div className="border rounded-xl p-4 mb-4 bg-white">
+      <div className="flex justify-between items-center mb-1">
+        <b className="flex items-center gap-2">
+          {ICONS[action.type]} {action.label}
+        </b>
+        <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
+      </div>
+      <input
+        className="w-full border-b my-1 py-1 px-2"
+        placeholder={
+          action.type === "email" ? "your@email.com" :
+          action.type === "whatsapp" ? "WhatsApp Number (digits only)" :
+          action.type === "linkedin" ? "LinkedIn Profile URL" :
+          action.type === "youtube" ? "YouTube Channel URL" :
+          action.type === "website" ? "Website URL" : ""
+        }
+        value={action.value || ""}
+        onChange={e => onChange({ ...action, value: e.target.value })}
+        type={action.type === "email" ? "email" : "text"}
+      />
+    </div>
+  );
+
+    case "emailSignup":
+      return (
+        <div className="border rounded-xl p-4 mb-4 bg-white">
+          <div className="flex justify-between items-center mb-1">
+            <b className="flex items-center gap-2"><FaEnvelope /> Email Signup</b>
+            <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
+          </div>
+          <input
+            className="w-full border-b my-1 py-1 px-2"
+            placeholder="Signup Label"
+            value={action.title || ""}
+            onChange={e => onChange({ ...action, title: e.target.value })}
+          />
+        </div>
+      );
+    
+    default:
+      return null;
+  }
+}
+
 function DigitalCardPreview({
   profile,
   actions,
   cardColor,
   fontColor = "#fff",
   buttonLabelColor = "#000",
-  socials,
+  socials = {},
   user = {},
   className = "",
   style = {},
-  containerProps = {}
+  containerProps = {},
+  socialIconColor = "#fff"  // <-- ADD THIS LINE!
 }) {
-function handleShowContactDetails(e) {
-  e.preventDefault();
-  const isMobile = window.innerWidth < 540;
-  const modalWidth = isMobile ? "94vw" : 370;
+  function handleShowContactDetails(e) {
+    e.preventDefault();
+    const isMobile = window.innerWidth < 540;
+    const modalWidth = isMobile ? "94vw" : 370;
 
-  // Get values from profile, fallback
-  const name = profile.name || "";
-  const jobTitle = profile.jobTitle || "";
-  const company = profile.company || "";
-  const email = profile.email || "";
-  const phone = profile.phone || profile.mobile || profile.cell || "";
-  const address = profile.address || "";
-  const website = profile.website || (socials && socials.website) || "";
-  const linkedin = profile.linkedin || (socials && socials.linkedin) || "";
-console.log(profile);
-  function getContactVCF(profile) {
-  return (
-    `BEGIN:VCARD\n` +
-    `VERSION:3.0\n` +
-    `FN:${profile.name ?? ""}\n` +
-    `ORG:${profile.company ?? ""}\n` +
-    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
-    (profile.website ? `URL:${profile.website}\n` : "") + 
-    (profile.email ? `EMAIL:${profile.email}\n` : "") +
-    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
-    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
-    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
-    `END:VCARD`
-  );
-}
+    // Get values from profile, fallback
+    const name = profile.name || "";
+    const jobTitle = profile.jobTitle || "";
+    const company = profile.company || "";
+    const email = profile.email || "";
+    const phone = profile.phone || profile.mobile || profile.cell || "";
+    const address = profile.address || "";
+    const website = profile.website || (socials && socials.website) || "";
+    const linkedin = profile.linkedin || (socials && socials.linkedin) || "";
 
-function downloadContactVCF(profile) {
-  const vcf = getContactVCF(profile);
-  const blob = new Blob([vcf], { type: 'text/vcard' });
-  const link = document.createElement('a');
-  link.href = window.URL.createObjectURL(blob);
-  link.download = `${profile.name ?? 'contact'}.vcf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-Swal.fire({
-  title: "My Contact Details",
-  html: `
-    <div style="text-align:left;font-size:15px;line-height:1.7;max-width:330px;">
-      <div style="font-weight:bold;font-size:17px;display:flex;align-items:center;gap:8px;">
-        <span style="font-size:17px;vertical-align:middle;margin-right:5px;">👤</span>
-        ${name}
-      </div>
-      ${(jobTitle || company) ? `
-        <div style="margin-top:4px;">
-          ${jobTitle ? jobTitle + " · " : ""}${company}
+    function getContactVCF(profile) {
+      return (
+        `BEGIN:VCARD\n` +
+        `VERSION:3.0\n` +
+        `FN:${profile.name ?? ""}\n` +
+        `ORG:${profile.company ?? ""}\n` +
+        (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+        (profile.website ? `URL:${profile.website}\n` : "") + 
+        (profile.email ? `EMAIL:${profile.email}\n` : "") +
+        (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+        (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+        (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+        `END:VCARD`
+      );
+    }
+
+    function downloadContactVCF(profile) {
+      const vcf = getContactVCF(profile);
+      const blob = new Blob([vcf], { type: 'text/vcard' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `${profile.name ?? 'contact'}.vcf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    Swal.fire({
+      title: "My Contact Details",
+      html: `
+        <div style="text-align:left;font-size:15px;line-height:1.7;max-width:330px;">
+          <div style="font-weight:bold;font-size:17px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:17px;vertical-align:middle;margin-right:5px;">👤</span>
+            ${name}
+          </div>
+          ${(jobTitle || company) ? `
+            <div style="margin-top:4px;">
+              ${jobTitle ? jobTitle + " · " : ""}${company}
+            </div>
+          ` : ""}
+          ${website ? `
+            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#1769aa;">🌐</span>
+              <a href="${website}" target="_blank" style="color:#1769aa;word-break:break-all;text-decoration:none">
+                ${website}
+              </a>
+            </div>
+          ` : ""}
+          ${email ? `
+            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#1769aa;">📧</span>
+              <a href="mailto:${email}" style="color:#1769aa;word-break:break-all;text-decoration:none">${email}</a>
+            </div>
+          ` : ""}
+          ${phone ? `
+            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#1769aa;">📞</span>
+              <a href="tel:${phone}" style="color:#1769aa;word-break:break-all;text-decoration:none">${phone}</a>
+            </div>
+          ` : ""}
+          ${address ? `
+            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#1769aa;">📍</span>
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" style="color:#1769aa;word-break:break-all;text-decoration:none">
+                ${address}
+              </a>
+            </div>
+          ` : ""}
+          ${linkedin ? `
+            <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
+              <span style="font-size:15px;vertical-align:middle;">🔗</span>
+              <a href="${linkedin}" target="_blank" style="color:#1769aa;text-decoration:none">
+                LinkedIn Profile
+              </a>
+            </div>
+          ` : ""}
+          <button id="saveVcfBtn"
+            style="
+              display:block;
+              margin:24px auto 0 auto;
+              background:#1565c0;
+              color:white;
+              font-weight:600;
+              border:none;
+              border-radius:7px;
+              padding:10px 22px;
+              cursor:pointer;
+              font-size:15px;
+              box-shadow:0 2px 8px rgba(21,101,192,0.07);
+              transition:background 0.2s;
+            "
+            onmouseover="this.style.background='#0d47a1';"
+            onmouseout="this.style.background='#1565c0';"
+          >
+            Save to Contacts 
+          </button>
         </div>
-      ` : ""}
-      ${website ? `
-  <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-    <span style="color:#1769aa;">🌐</span>
-    <a href="${website}" target="_blank" style="color:#1769aa;word-break:break-all;text-decoration:none">
-      ${website}
-    </a>
-  </div>
-      ` : ""}
-      ${email ? `
-        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="color:#1769aa;">📧</span>
-          <a href="mailto:${email}" style="color:#1769aa;word-break:break-all;text-decoration:none">${email}</a>
-        </div>
-      ` : ""}
-      ${phone ? `
-        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="color:#1769aa;">📞</span>
-          <a href="tel:${phone}" style="color:#1769aa;word-break:break-all;text-decoration:none">${phone}</a>
-        </div>
-      ` : ""}
-      ${address ? `
-        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="color:#1769aa;">📍</span>
-          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}" style="color:#1769aa;word-break:break-all;text-decoration:none">
-            ${address}
-          </a>
-        </div>
-      ` : ""}
-      ${linkedin ? `
-        <div style="margin-top:13px;display:flex;align-items:center;gap:8px;">
-          <span style="font-size:15px;vertical-align:middle;">🔗</span>
-          <a href="${linkedin}" target="_blank" style="color:#1769aa;text-decoration:none">
-            LinkedIn Profile
-          </a>
-        </div>
-      ` : ""}
-     <button id="saveVcfBtn"
-  style="
-    display:block;
-    margin:24px auto 0 auto;
-    background:#1565c0;
-    color:white;
-    font-weight:600;
-    border:none;
-    border-radius:7px;
-    padding:10px 22px;
-    cursor:pointer;
-    font-size:15px;
-    box-shadow:0 2px 8px rgba(21,101,192,0.07);
-    transition:background 0.2s;
-  "
-  onmouseover="this.style.background='#0d47a1';"
-  onmouseout="this.style.background='#1565c0';"
->
-  Download Contact as VCF
-</button>
-
-    </div>
-  `,
-  showCloseButton: true,
-  showConfirmButton: false,
-  width: modalWidth,
-  padding: '1.5em',
-   didOpen: () => {
-  const btn = Swal.getHtmlContainer().querySelector('#saveVcfBtn');
-  if (btn) btn.onclick = () => downloadContactVCF(profile);
-}
-
-});
-}
-
-
+      `,
+      showCloseButton: true,
+      showConfirmButton: false,
+      width: modalWidth,
+      padding: '1.5em',
+      didOpen: () => {
+        const btn = Swal.getHtmlContainer().querySelector('#saveVcfBtn');
+        if (btn) btn.onclick = () => downloadContactVCF(profile);
+      }
+    });
+  }
 
   function handleRequestMeetingModal(e) {
-  e.preventDefault();
-  Swal.fire({
-    title: "Request a Meeting",
-    html: `
-      <input type="text" id="swal-meeting-name" class="swal2-input" placeholder="Name (required)" required maxlength="80" />
-      <input type="email" id="swal-meeting-email" class="swal2-input" placeholder="Email (required)" required maxlength="100" />
-      <textarea id="swal-meeting-message" class="swal2-textarea" rows="4" placeholder="Your proposed time or message"></textarea>
-    `,
-    showCloseButton: true,
-    confirmButtonText: 'Send Request',
-    focusConfirm: false,
-    width: 370,
-    preConfirm: () => {
-      const name = Swal.getPopup().querySelector('#swal-meeting-name').value.trim();
-      const email = Swal.getPopup().querySelector('#swal-meeting-email').value.trim();
-      const message = Swal.getPopup().querySelector('#swal-meeting-message').value.trim();
-      if (!name || !email) {
-        Swal.showValidationMessage(`Name and email are required`);
-        return false;
+    e.preventDefault();
+    Swal.fire({
+      title: "Request a Meeting",
+      html: `
+        <input type="text" id="swal-meeting-name" class="swal2-input" placeholder="Name (required)" required maxlength="80" />
+        <input type="email" id="swal-meeting-email" class="swal2-input" placeholder="Email (required)" required maxlength="100" />
+        <textarea id="swal-meeting-message" class="swal2-textarea" rows="4" placeholder="Your proposed time or message"></textarea>
+      `,
+      showCloseButton: true,
+      confirmButtonText: 'Send Request',
+      focusConfirm: false,
+      width: 370,
+      preConfirm: () => {
+        const name = Swal.getPopup().querySelector('#swal-meeting-name').value.trim();
+        const email = Swal.getPopup().querySelector('#swal-meeting-email').value.trim();
+        const message = Swal.getPopup().querySelector('#swal-meeting-message').value.trim();
+        if (!name || !email) {
+          Swal.showValidationMessage(`Name and email are required`);
+          return false;
+        }
+        return { name, email, message };
       }
-      // Optionally: send this to backend/owner/email/etc.
-      return { name, email, message };
+    }).then(result => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          icon: "success",
+          title: "Request Sent!",
+          text: "Your meeting request has been delivered."
+        });
+      }
+    });
+  }
+
+  // Social
+const socialActions = actions.filter(
+  a =>
+    ["email", "whatsapp", "youtube", "linkedin", "website"].includes(a.type) &&
+    a.value && a.value.trim() !== ""
+);
+
+<div className="flex gap-4 mb-3">
+  {socialActions.map(a => {
+    let href = "#";
+    if (a.type === "email") href = `mailto:${a.value}`;
+    else if (a.type === "whatsapp")
+      href = a.value.startsWith("http") ? a.value : `https://wa.me/${a.value.replace(/[^0-9]/g, "")}`;
+    else href = a.value;
+    return (
+      <a
+        key={a.type}
+        className="hover:opacity-80 transition"
+        style={{ color: socialIconColor }}    // <-- THIS is the LIVE color!
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {ICONS[a.type] || <FaLink size={22} />}
+      </a>
+    );
+  })}
+</div>
+
+
+
+
+
+  // Modal
+ const modalActions = actions.filter(
+  a => a.modal === true ||
+       ["contactForm", "bookMeeting", "shareDetails"].includes(a.type)
+)
+ || [];
+
+  return (
+    <div
+      {...containerProps}
+      className={`relative w-full max-w-xs rounded-3xl shadow-2xl px-6 py-8 flex flex-col items-center ${className}`}
+      style={{
+        background: cardColor,
+        color: fontColor,
+        ...style
+      }}
+      tabIndex={0}
+    >
+      <div
+        className="w-24 h-24 rounded-full border-4 border-white shadow-xl mb-2 bg-white flex items-center justify-center overflow-hidden flex-shrink-0"
+        style={{
+          width: 96, height: 96, minWidth: 96, minHeight: 96, maxWidth: 96, maxHeight: 96
+        }}>
+        {profile.profilePhoto
+          ? <img src={profile.profilePhoto} alt="Profile" className="object-cover h-full w-full rounded-full" />
+          : <FaImage size={48} className="text-gray-300" />}
+      </div>
+      <div className="text-center mb-3">
+        <div className="font-bold text-2xl">{profile.name || ""}</div>
+        <div className="text-base">{profile.jobTitle}</div>
+        <div className="text-sm">{profile.company}</div>
+        <div className="text-xs mt-1">{profile.bio}</div>
+      </div>
+      <div className="flex gap-4 mb-3">
+        {socialActions.map(a => {
+          let href = "#";
+          if (a.type === "email") href = `mailto:${a.value}`;
+          else if (a.type === "whatsapp") href = a.value.startsWith("http") ? a.value : `https://wa.me/${a.value}`;
+          else href = a.value;
+          return (
+            <a
+  key={a.type}
+  href={href}
+  className="hover:opacity-80 transition"
+  style={{ color: socialIconColor }} // THIS LINE enables live color
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  {ICONS[a.type] || <FaLink size={22} />}
+</a>
+
+          );
+        })}
+      </div>
+      <div className="flex flex-col gap-3 w-full mb-4 mt-2">
+  {actions.filter(a => a.modal === true || ["contactForm", "bookMeeting", "shareDetails"].includes(a.type)).map((action, idx) => {
+    // Contact Form (My Contact Details)
+    if (action.type === "contactForm") {
+      return (
+        <button
+          key={action.id || idx}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+          onClick={handleShowContactDetails}
+        >
+          {action.icon || <FaUser />}
+          <span className="truncate">{action.label || "My Contact Details"}</span>
+        </button>
+      );
     }
-  }).then(result => {
-    if (result.isConfirmed) {
-      Swal.fire({
-        icon: "success",
-        title: "Request Sent!",
-        text: "Your meeting request has been delivered."
-      });
+    // Book a Meeting
+    if (action.type === "bookMeeting") {
+      if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
+        return (
+          <a
+            key={action.id || idx}
+            href={profile.calendlyLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+            style={{ color: buttonLabelColor, textDecoration: "none" }}
+          >
+            {action.icon || <FaUser />}
+            <span className="truncate">{action.label || "Book a Meeting"}</span>
+          </a>
+        );
+      } else {
+        return (
+          <button
+            key={action.id || idx}
+            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+            style={{ color: buttonLabelColor, textDecoration: "none" }}
+            onClick={handleRequestMeetingModal}
+          >
+            {action.icon || <FaUser />}
+            <span className="truncate">{action.label || "Request a Meeting"}</span>
+          </button>
+        );
+      }
     }
-  });
-}
+    // Share Your Details With Me
+    if (action.type === "shareDetails") {
+      return (
+        <button
+          key={action.id || idx}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+          onClick={handleShareDetailsModal}
+        >
+          {action.icon || <FaUser />}
+          <span className="truncate">{action.label || "Share Your Details With Me"}</span>
+        </button>
+      );
+    }
+    // Custom fallback (shouldn't be reached)
+    return null;
+  })}
+</div>
+
+      {profile.buttonLabel && (
+        <button
+          className="w-full bg-white font-semibold rounded-2xl py-3 text-lg mt-3 shadow hover:bg-gray-100 transition text-center"
+          style={{ color: "#000", textDecoration: "none" }}
+        >
+          {profile.buttonLabel}
+        </button>
+      )}
+    </div>
+  );
 
 
   // Handler for Share Your Details With Me modal
@@ -510,103 +906,32 @@ function downloadContactVCF(profile) {
     </button>
   );
 }
+function removeUndefined(obj) {
+  if (Array.isArray(obj)) {
+    return obj
+      .map(removeUndefined)
+      .filter(item => item !== undefined);  // filters undefined/null inside arrays!
+  } else if (obj && typeof obj === "object") {
+    const clean = {};
+    for (const k in obj) {
+      if (obj[k] !== undefined) clean[k] = removeUndefined(obj[k]);
+    }
+    return clean;
+  }
+  return obj;
+}
+
 export default function DigitalCardEditor() {
+  const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
   const cardScrollRef = useRef(null);
   const formScrollRef = useRef(null);
-const { cardId } = useParams();
-const isEditMode = cardId && cardId !== "new";
-const [cardCreatedAt, setCardCreatedAt] = useState(null);
+  const { cardId } = useParams();
+  const isEditMode = cardId && cardId !== "new";
+  const [cardCreatedAt, setCardCreatedAt] = useState(null);
 
-
-useEffect(() => {
-  async function fetchCard() {
-    // If new card, reset to blank/default fields
-    if (!cardId || cardId === "new") {
-     setProfile({
-  name: "",
-  company: "",
-  jobTitle: "",
-  bio: "",
-  buttonLabel: "",
-  profilePhoto: "",
-  linkedin: "",
-  email: "",
-  whatsapp: "",
-  calendlyLink: "",
-  youtube: "",
-  phone: "",
-  address: "",
-  website: ""
-});
-      setCardColor("#1a237e");
-      setFontColor("#ffffff");
-      setButtonLabelColor("#ffffff");
-      setActions([...PRESET_ACTIONS]);
-      setCardName("");
-      setCardCreatedAt(null);
-      return;
-    }
-
-    // Otherwise load the card from Firestore
-    try {
-      const snap = await getDoc(doc(db, "cards", cardId));
-      if (snap.exists()) {
-        const data = snap.data();
-        console.log("Loaded actions from Firestore:", data.actions);
-
-        setProfile({
-  name: data.name || "",
-  company: data.company || "",
-  jobTitle: data.jobTitle || "",
-  bio: data.bio || "",
-  buttonLabel: data.buttonLabel || "",
-  profilePhoto: data.profilePhoto || "",
-  linkedin: data.linkedin || "",
-  email: data.email || "",
-  whatsapp: data.whatsapp || "",
-  calendlyLink: data.calendlyLink || "",
-  youtube: data.youtube || "",
-  phone: data.phone || "",
-  address: data.address || "",
-  website: data.website || ""
-});
-        setCardName(data.cardName || "");
-        setCardCreatedAt(data.createdAt || null);
-        setCardColor(data.cardColor || "#1a237e");
-        setFontColor(data.fontColor || "#ffffff");
-        setButtonLabelColor(data.buttonLabelColor || "#ffffff");
-        // PATCH: Only load what was saved! (Set modal:true for special labels)
-        setActions(
-          Array.isArray(data.actions)
-            ? data.actions.map(a => {
-                const label = a.label?.trim().toLowerCase() || "";
-                return MODAL_LABELS.includes(label)
-                  ? { ...a, modal: true }
-                  : a;
-              })
-            : []
-        );
-      }
-    } catch (e) {
-      console.error("Error loading card:", e);
-      // Optionally show a toast or alert here
-    }
-  }
-
-  fetchCard();
-}, [cardId]);
-
-
-
-  useEffect(() => {
-    const onResize = () => setIsSmall(window.innerWidth <= 1024);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  // State: load from user Firestore doc on login
   const [cardName, setCardName] = useState("");
   const [profile, setProfile] = useState({
     name: "",
@@ -623,13 +948,11 @@ useEffect(() => {
     phone: "",
     address: "",
     website: ""
-    
   });
-  const [actions, setActions] = useState([...PRESET_ACTIONS]);
+  const [actions, setActions] = useState([]);
   const [cardColor, setCardColor] = useState("#1a237e");
   const [fontColor, setFontColor] = useState("#ffffff");
   const [buttonLabelColor, setButtonLabelColor] = useState("#ffffff");
-
 
   const [showCrop, setShowCrop] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState(null);
@@ -638,255 +961,201 @@ useEffect(() => {
   const [croppedArea, setCroppedArea] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Populate form from user profile, but cards are saved separately
- useEffect(() => {
-  const unsub = auth.onAuthStateChanged(async (curr) => {
-    if (!curr) return;
-    const docRef = doc(db, "users", curr.uid);
-    const snapshot = await getDoc(docRef);
-    if (snapshot.exists()) {
-      const user = snapshot.data();
-       if (!isEditMode) { // Only set defaults for new card
-        setProfile(prev => ({
-          ...prev,
-          name: user.name || "",
-          company: user.company || "",
-          jobTitle: user.jobTitle || "",
-          bio: user.bio || "",
-          buttonLabel: user.buttonLabel || "",
-          profilePhoto: user.profilePhoto || "",
-          linkedin: user.linkedin || "",
-          email: user.email || "",
-          whatsapp: user.whatsapp || "",
-          youtube: user.youtube || "",
-          calendlyLink: user.calendlyLink || "",
-          phone: user.phone || "",
-          address: user.address || "",
-          website: user.website || ""
-        }));
-        setCardColor(user.cardColor || "#1a237e");
-         setfontColor(user.fontColor || "#1a237e");
-        setButtonLabelColor(user.buttonLabelColor || "#000000");
-        setActions(Array.isArray(user.actions) && user.actions.length > 0
-    ? user.actions
-    : [...PRESET_ACTIONS]);
-  // ...other profile colors, etc.
-}
+  // Modal UI state for the new action builder
+  const [showActionPicker, setShowActionPicker] = useState(false);
+  const [activeGroup, setActiveGroup] = useState(ACTION_TYPES[0].group);
+
+  // Load card logic and resizing events, unchanged...
+  useEffect(() => {
+    async function fetchCard() {
+      // If new card, reset to blank/default fields
+      if (!cardId || cardId === "new") {
+        setProfile({
+          name: "",
+          company: "",
+          jobTitle: "",
+          bio: "",
+          buttonLabel: "",
+          profilePhoto: "",
+          linkedin: "",
+          email: "",
+          whatsapp: "",
+          youtube: "",
+          calendlyLink: "",
+          phone: "",
+          address: "",
+          website: ""
+        });
+        setCardColor("#1a237e");
+        setFontColor("#ffffff");
+        setButtonLabelColor("#ffffff");
+        setActions([]);
+        setCardName("");
+        setCardCreatedAt(null);
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, "cards", cardId));
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile({
+            name: data.name || "",
+            company: data.company || "",
+            jobTitle: data.jobTitle || "",
+            bio: data.bio || "",
+            buttonLabel: data.buttonLabel || "",
+            profilePhoto: data.profilePhoto || "",
+            linkedin: data.linkedin || "",
+            email: data.email || "",
+            whatsapp: data.whatsapp || "",
+            youtube: data.youtube || "",
+            calendlyLink: data.calendlyLink || "",
+            phone: data.phone || "",
+            address: data.address || "",
+            website: data.website || ""
+          });
+          setCardName(data.cardName || "");
+          setCardCreatedAt(data.createdAt || null);
+          setCardColor(data.cardColor || "#1a237e");
+          setFontColor(data.fontColor || "#ffffff");
+          setButtonLabelColor(data.buttonLabelColor || "#ffffff");
+          // PATCH: Only load what was saved! (Set modal:true for special labels)
+          setActions(Array.isArray(data.actions) ? data.actions : []);
+
+        }
+      } catch (e) {
+        console.error("Error loading card:", e);
+      }
     }
-  });
-  return () => unsub();
-}, [isEditMode]);
+    fetchCard();
+  }, [cardId]);
 
+  useEffect(() => {
+    const onResize = () => setIsSmall(window.innerWidth <= 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
-  const updateProfileField = (k, v) => setProfile(p => ({ ...p, [k]: v }));
-  const updateAction = (i, k, v) => setActions(a => a.map((x, idx) => idx === i ? { ...x, [k]: v } : x));
-  const removeAction = (i) => setActions(a => a.filter((_, idx) => idx !== i));
-  const addAction = () => setActions(a => [...a, { label: "", url: "", icon: ICONS.custom }]);
-  const socials = {
-    linkedin: profile.linkedin,
-    email: profile.email,
-    whatsapp: profile.whatsapp,
-    youtube: profile.youtube
-  };
+  // Load user state logic unchanged...
 
- // 1. Photo select handler (fix: use files)
-function handleProfilePhotoUpload(e) {
-  if (e.target.files && e.target.files[0]) {
-    const url = URL.createObjectURL(e.target.files[0]); // <-- FIXED!
-    setAvatarSrc(url);
-    setShowCrop(true);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async (curr) => {
+      if (!curr) return;
+      const docRef = doc(db, "users", curr.uid);
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const user = snapshot.data();
+        if (!isEditMode) { // Only set defaults for new card
+          setProfile(prev => ({
+            ...prev,
+            name: user.name || "",
+            company: user.company || "",
+            jobTitle: user.jobTitle || "",
+            bio: user.bio || "",
+            buttonLabel: user.buttonLabel || "",
+            profilePhoto: user.profilePhoto || "",
+            linkedin: user.linkedin || "",
+            email: user.email || "",
+            whatsapp: user.whatsapp || "",
+            youtube: user.youtube || "",
+            calendlyLink: user.calendlyLink || "",
+            phone: user.phone || "",
+            address: user.address || "",
+            website: user.website || ""
+          }));
+          setCardColor(user.cardColor || "#1a237e");
+          setFontColor(user.fontColor || "#ffffff");
+          setButtonLabelColor(user.buttonLabelColor || "#000000");
+          setActions(Array.isArray(user.actions) && user.actions.length > 0
+            ? user.actions
+            : []);
+        }
+      }
+    });
+    return () => unsub();
+  }, [isEditMode]);
+
+  // Action change logic for dynamic builder
+  const updateAction = (idx, updatedAction) => setActions(actions => actions.map((a, i) => i === idx ? updatedAction : a));
+  const removeAction = idx => setActions(actions => actions.filter((_, i) => i !== idx));
+
+  // Avatar file/crop logic unchanged
+  function handleProfilePhotoUpload(e) {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0]);
+      setAvatarSrc(url);
+      setShowCrop(true);
+    }
   }
-}
-
-// 2. Crop complete callback (no change)
-const onCropComplete = useCallback((_, croppedAreaPixels) => setCroppedArea(croppedAreaPixels), []);
-
-// 3. Crop confirm with Firebase Storage upload
-async function handleCropConfirm() {
-  if (!avatarSrc || !croppedArea) {
-    setShowCrop(false);
+  const onCropComplete = useCallback((_, croppedAreaPixels) => setCroppedArea(croppedAreaPixels), []);
+  async function handleCropConfirm() {
+    if (!avatarSrc || !croppedArea) {
+      setShowCrop(false);
+      setAvatarSrc(null);
+      return;
+    }
+    const img = await getCroppedImg(avatarSrc, croppedArea);
+    try {
+      const storage = getStorage();
+      const userId = auth.currentUser?.uid || "anonymous";
+      const fileName = `profilePhotos/${userId}_${Date.now()}.png`;
+      const storageRef = ref(storage, fileName);
+      await uploadString(storageRef, img, "data_url");
+      const url = await getDownloadURL(storageRef);
+      setProfile(prev => ({ ...prev, profilePhoto: url }));
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Photo Upload Failed", text: e.message });
+    }
     setAvatarSrc(null);
-    return;
+    setShowCrop(false);
   }
-  const img = await getCroppedImg(avatarSrc, croppedArea);
-
-  try {
-    const storage = getStorage();
-    const userId = auth.currentUser?.uid || "anonymous";
-    const fileName = `profilePhotos/${userId}_${Date.now()}.png`;
-    const storageRef = ref(storage, fileName);
-
-    // Upload data url to Storage
-    await uploadString(storageRef, img, "data_url");
-    // Get downloadable URL for image
-    const url = await getDownloadURL(storageRef);
-
-    setProfile(prev => ({ ...prev, profilePhoto: url }));
-  } catch (e) {
-    Swal.fire({ icon: "error", title: "Photo Upload Failed", text: e.message });
-  }
-
-  setAvatarSrc(null);
-  setShowCrop(false);
-}
 
 
 async function handleSave() {
-const patterns = {
-  whatsapp: /^https:\/\/wa\.me\/\d{6,}$/,
-  youtube: /^https:\/\/(www\.)?(youtube\.com|youtu\.be)\/\S+/,
-  calendly: /^https:\/\/calendly\.com\/[a-zA-Z0-9_\-\/]+$/,
-  facebook: /^https:\/\/(www\.)?facebook\.com\/\S+$/,
-  linkedin: /^https:\/\/(www\.)?linkedin\.com\/\S+$/,
-  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  website: /^https?:\/\/\S+\.\S+/
-};
-
-    if (profile.linkedin && !patterns.linkedin.test(profile.linkedin.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid LinkedIn link", text: "LinkedIn link must start with https://linkedin.com/" }); return;
-}
-if (profile.youtube && !patterns.youtube.test(profile.youtube.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid YouTube link", text: "YouTube link must start with https://youtube.com/ or https://youtu.be/" }); return;
-}
-if (profile.whatsapp && !patterns.whatsapp.test(profile.whatsapp.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid WhatsApp link", text: "WhatsApp link must be like https://wa.me/123456789" }); return;
-}
-if (profile.calendlyLink && !patterns.calendly.test(profile.calendlyLink.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid Calendly link", text: "Calendly link must be like https://calendly.com/username" }); return;
-}
-if (profile.facebook && !patterns.facebook.test(profile.facebook.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid Facebook link", text: "Facebook link must start with https://facebook.com/" }); return;
-}
-if (profile.email && !patterns.email.test(profile.email.trim())) {
-  Swal.fire({ icon: "warning", title: "Invalid Email Address", text: "Please enter a valid email address (not a mailto: link)." }); return;
-}
-const hasEmptyLabel = actions.some(a => !a.label || !a.label.trim());
-if (hasEmptyLabel) {
-  Swal.fire({
-    icon: "warning",
-    title: "Button label is required for each action",
-    text: "Please provide a label for every action button."
-  });
-  return;
-}
-
-for (const a of actions) {
-  const label = a.label?.trim().toLowerCase() || "";
-  const url = a.url?.trim() || "";
-
-  // These don't require link or validation
-const isModalAction = !!a.modal;
-
-  // If LINK IS PRESENT and NOT a modal action: always validate!
-  if (url && !isModalAction) {
-    if (label.includes("whatsapp")) {
-      if (!patterns.whatsapp.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid WhatsApp link", text: "WhatsApp link must be like https://wa.me/123456789" }); return;
-      }
-    } else if (label.includes("youtube")) {
-      if (!patterns.youtube.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid YouTube link", text: "YouTube link must start with https://youtube.com/ or https://youtu.be/" }); return;
-      }
-    } else if (label.includes("calendly")) {
-      if (!patterns.calendly.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid Calendly link", text: "Calendly link must be like https://calendly.com/username" }); return;
-      }
-    } else if (label.includes("facebook")) {
-      if (!patterns.facebook.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid Facebook link", text: "Facebook link must start with https://facebook.com/" }); return;
-      }
-    } else if (label.includes("linkedin")) {
-      if (!patterns.linkedin.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid LinkedIn link", text: "LinkedIn link must start with https://linkedin.com/" }); return;
-      }
-    } else if (label.includes("email")) {
-      if (!patterns.email.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid Email link", text: "Email link must start with mailto: and have a valid email address." }); return;
-      }
-    } else {
-      if (!patterns.website.test(url)) {
-        Swal.fire({ icon: "warning", title: "Invalid link", text: "Link must start with http:// or https:// and be a valid URL."  }); return;
-      }
-    }
-  }
-
-  // For actions that REQUIRE a link (not social, not modal): must be filled and valid
-  const isRequired = a.label && !isModalAction && !(
-    label.includes("whatsapp") ||
-    label.includes("youtube") ||
-    label.includes("calendly") ||
-    label.includes("facebook") ||
-    label.includes("linkedin") ||
-    label.includes("email")
-  );
-  if (isRequired && !url) {
-    Swal.fire({
-      icon: "warning",
-      title: "Please enter a link for every action button.",
-      text: "All standard action buttons must have a valid URL except 'My Contact Details', 'Book a Meeting', 'Share your details with me', and recognized social links."
-    });
-    return;
-  }
-}
-
-
-
   const curr = auth.currentUser;
   if (!curr) return alert("Not logged in.");
   if (!cardName.trim()) {
     Swal.fire({ icon: "warning", title: "Please enter a Card Name!" });
     return;
   }
-  try {
-    const cardData = {
-      cardName,
-      ...profile,
-      actions: actions.map(a => ({
-        label: a.label,
-        url: a.url,
-        iconType: a.iconType || "custom",
-          modal: !!a.modal
-      })),
-      cardColor,
-       fontColor,
-       buttonLabelColor,
-      userId: curr.uid,
-      updatedAt: serverTimestamp()
-    };
 
-    try {
-  // ...setup cardData
-  if (isEditMode) {
-    await setDoc(doc(db, "cards", cardId), {
-      ...cardData,
-      createdAt: cardCreatedAt || serverTimestamp()
-    }, { merge: true });
-    console.log("Calling Swal for update");         // <<< Add this!
-    Swal.fire({
-      icon: "success",
-      title: "Card Updated!",
-      text: "Your card changes were saved."
-    });
-  } else {
-    await addDoc(collection(db, "cards"), {
-      ...cardData,
-      createdAt: serverTimestamp()
-    });
-    console.log("Calling Swal for create");         // <<< Add this!
-    Swal.fire({
-      icon: "success",
-      title: "Card Created!",
-      text: "Your card was created and saved successfully."
-    });
-  }
-} catch (e) {
-  console.error("ERROR SAVING:", e);
-  Swal.fire({
-    icon: "error",
-    title: isEditMode ? "Error Updating Card" : "Error Creating Card",
-    text: e.message
+  // Clean actions: remove icon and any undefined values
+  const cleanedActions = actions.map(({ icon, desc, ...rest }) => removeUndefined(rest));
+
+  // Clean the whole profile/cardData for undefineds
+  const cardDataToSave = removeUndefined({
+    cardName,
+    ...profile,
+    actions: cleanedActions,
+    cardColor,
+    fontColor,
+    buttonLabelColor,
+    userId: curr.uid,
+    updatedAt: serverTimestamp()
   });
-}
+
+  try {
+    if (isEditMode) {
+      await setDoc(doc(db, "cards", cardId), {
+        ...cardDataToSave,
+        createdAt: cardCreatedAt || serverTimestamp()
+      }, { merge: true });
+      Swal.fire({
+        icon: "success",
+        title: "Card Updated!",
+        text: "Your card changes were saved."
+      });
+    } else {
+      await addDoc(collection(db, "cards"), {
+        ...cardDataToSave,
+        createdAt: serverTimestamp()
+      });
+      Swal.fire({
+        icon: "success",
+        title: "Card Created!",
+        text: "Your card was created and saved successfully."
+      });
+    }
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -895,18 +1164,14 @@ const isModalAction = !!a.modal;
     });
   }
 }
-// Helper to convert the icon prop (can be improved as needed)
-function getIconTypeFromAction(action) {
-  if (action.iconType) return action.iconType;
-  if (!action.icon) return "custom";
-  if (action.icon === ICONS.whatsapp) return "whatsapp";
-  if (action.icon === ICONS.email) return "email";
-  if (action.icon === ICONS.linkedin) return "linkedin";
-  if (action.icon === ICONS.website) return "website";
-  if (action.icon === ICONS.youtube) return "youtube";
-  return "custom";
-}
 
+
+  const socials = {
+    linkedin: profile.linkedin,
+    email: profile.email,
+    whatsapp: profile.whatsapp,
+    youtube: profile.youtube
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 relative overflow-x-hidden">
@@ -970,11 +1235,12 @@ function getIconTypeFromAction(action) {
                   buttonLabelColor={buttonLabelColor}
                   socials={socials}
                   style={{ margin: "auto" }}
+                   socialIconColor={socialIconColor}   // <-- ADD THIS LINE!
                 />
               </div>
             </div>
           )}
-          {/* Form: scrollable, independent from card */}
+          {/* --- Form area with dynamic action builder --- */}
           <section
             ref={formScrollRef}
             className="w-full lg:w-1/2 min-h-screen bg-white border-l px-4 sm:px-8 py-12 overflow-y-auto"
@@ -1005,246 +1271,236 @@ function getIconTypeFromAction(action) {
               </label>
               <input id="profilePhoto" type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoUpload} />
               <span className="text-xs text-gray-400 mb-4">Click avatar to upload</span>
+                    {/* Profile fields below avatar */}
+<div className="grid grid-cols-1 gap-3 mt-3 mb-6">
+  <input
+    className="w-full text-center font-bold text-xl bg-transparent focus:outline-none border-b-2 border-blue-100 py-2 placeholder-gray-500"
+    value={profile.name}
+    onChange={e => setProfile(prev => ({ ...prev, name: e.target.value }))}
+    placeholder="Full Name"
+    maxLength={38}
+  />
+  <input
+    className="w-full text-center text-base bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400"
+    value={profile.jobTitle}
+    onChange={e => setProfile(prev => ({ ...prev, jobTitle: e.target.value }))}
+    placeholder="Job Title"
+    maxLength={44}
+  />
+  <input
+    className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400"
+    value={profile.company}
+    onChange={e => setProfile(prev => ({ ...prev, company: e.target.value }))}
+    placeholder="Company"
+    maxLength={44}
+  />
+  <textarea
+    className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400 resize-none"
+    rows={2}
+    maxLength={110}
+    value={profile.bio}
+    onChange={e => setProfile(prev => ({ ...prev, bio: e.target.value }))}
+    placeholder="Short bio"
+  />
+</div>
+
+
             </div>
             {showCrop && (
-  <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-    <div className="bg-white rounded-2xl p-4 w-full max-w-sm flex flex-col items-center">
-      {/* Crop area should NOT use absolute position */}
-      <div className="relative w-full flex justify-center items-center" style={{height: 250}}>
-        <Cropper
-          image={avatarSrc}
-          crop={crop}
-          zoom={zoom}
-          aspect={1}
-          cropShape="round"
-          showGrid={false}
-          onCropChange={setCrop}
-          onZoomChange={setZoom}
-          onCropComplete={onCropComplete}
-        />
-      </div>
-      {/* Buttons below */}
-      <div className="flex justify-between gap-3 mt-4 w-full">
-        <button
-          className="flex-1 px-4 py-2 rounded bg-gray-200"
-          onClick={() => {
-            setShowCrop(false);
-            setAvatarSrc(null);
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          className="flex-1 px-4 py-2 rounded bg-blue-600 text-white"
-          onClick={handleCropConfirm}
-        >
-          Select
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-            <div className="grid grid-cols-1 gap-3 mt-2">
-              <input className="w-full text-center font-bold text-xl bg-transparent focus:outline-none border-b-2 border-blue-100 py-2 placeholder-gray-500"
-                     value={profile.name} onChange={e => updateProfileField("name", e.target.value)} placeholder="Full Name" maxLength={38} />
-              <input className="w-full text-center text-base bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400"
-                     value={profile.jobTitle} onChange={e => updateProfileField("jobTitle", e.target.value)} placeholder="Job Title" maxLength={44} />
-              <input className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400"
-                     value={profile.company} onChange={e => updateProfileField("company", e.target.value)} placeholder="Company" maxLength={44} />
-                     <input
-  type="text"
-  name="phone"
-  value={profile.phone}
-  onChange={e => setProfile(prev => ({ ...prev, phone: e.target.value }))}
-  placeholder="Phone Number"
-  style={{ display: "none" }}
-/>
-<input
-  type="text"
-  name="address"
-  value={profile.address}
-  onChange={e => setProfile(prev => ({ ...prev, address: e.target.value }))}
-  placeholder="Address"
-  style={{ display: "none" }}
-/>
-<input
-  type="text"
-  name="website"
-  value={profile.website}
-  onChange={e => setProfile(prev => ({ ...prev, website: e.target.value }))}
-  placeholder="website"
-  style={{ display: "none" }}
-/>
-
-              <textarea className="w-full text-center text-sm bg-transparent focus:outline-none border-b border-blue-100 py-2 placeholder-gray-400 resize-none"
-                rows={2} maxLength={110} value={profile.bio} onChange={e => updateProfileField("bio", e.target.value)} placeholder="Short bio" />
-            </div>
+              <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl p-4 w-full max-w-sm flex flex-col items-center">
+                  <div className="relative w-full flex justify-center items-center" style={{height: 250}}>
+                    <Cropper
+                      image={avatarSrc}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1}
+                      cropShape="round"
+                      showGrid={false}
+                      onCropChange={setCrop}
+                      onZoomChange={setZoom}
+                      onCropComplete={onCropComplete}
+                    />
+                  </div>
+                  <div className="flex justify-between gap-3 mt-4 w-full">
+                    <button
+                      className="flex-1 px-4 py-2 rounded bg-gray-200"
+                      onClick={() => {
+                        setShowCrop(false);
+                        setAvatarSrc(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="flex-1 px-4 py-2 rounded bg-blue-600 text-white"
+                      onClick={handleCropConfirm}
+                    >
+                      Select
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="w-full flex flex-col items-center mt-5 mb-4">
               <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Card Color</label>
               <div className="flex gap-2 flex-wrap justify-center">
                 {COLOR_OPTIONS.map((c, i) => (
-                  <button key={i} className={`w-8 h-8 rounded-full border-2 ${cardColor === c ? "border-black" : "border-gray-200"}`}
+                  <button key={i}
+                          className={`w-8 h-8 rounded-full border-2 ${cardColor === c ? "border-black" : "border-gray-200"}`}
                           style={{ background: c }} onClick={() => setCardColor(c)} aria-label={c} type="button" />
                 ))}
-                <input type="color" value={cardColor} onChange={e => setCardColor(e.target.value)}
-                       className="w-8 h-8 border border-gray-400 rounded-full ml-2" aria-label="Custom color" />
+                <input type="color" value={cardColor}
+                  onChange={e => setCardColor(e.target.value)}
+                  className="w-8 h-8 border border-gray-400 rounded-full ml-2" aria-label="Custom color" />
               </div>
             </div>
             <div className="w-full flex flex-col items-center mt-3">
-  <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Font Color</label>
+              <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Font Color</label>
+              <input
+                type="color"
+                value={fontColor}
+                onChange={e => setFontColor(e.target.value)}
+                className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer mb-3"
+                aria-label="Font color"
+              />
+            </div>
+            <div className="w-full flex flex-col items-center mt-2">
+              <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Button Label Color</label>
+              <input
+                type="color"
+                value={buttonLabelColor}
+                onChange={e => setButtonLabelColor(e.target.value)}
+                className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
+                aria-label="Button label color"
+              />
+            </div>
+            <div className="w-full flex flex-col items-center mt-3">
+  <label className="text-xs font-semibold mb-2 flex items-center gap-2">
+    <FaPalette /> Social Icon Color
+  </label>
   <input
     type="color"
-    value={fontColor}
-    onChange={e => setFontColor(e.target.value)}
-    className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer mb-3"
-    aria-label="Font color"
-  />
-</div>
-<div className="w-full flex flex-col items-center mt-2">
-  <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Button Label Color</label>
-  <input
-    type="color"
-    value={buttonLabelColor}
-    onChange={e => setButtonLabelColor(e.target.value)}
+    value={socialIconColor}
+    onChange={e => setSocialIconColor(e.target.value)}
     className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
-    aria-label="Button label color"
+    aria-label="Social icon color"
   />
 </div>
-<div className="w-full">
+
+            {/* --------- ACTION BUILDER ---------- */}
+           <div className="w-full">
   <h3 className="font-semibold text-center mb-2">Links & Actions</h3>
- {actions.map((a, idx) => {
-  const isModalAction = !!a.modal;
-  const label = a.label?.trim().toLowerCase() || "";
-  const isRequired = idx === 0; // first link required
-
-  return (
-    <div
-      key={idx}
-      className="border border-gray-200 rounded-xl p-4 space-y-2 bg-white shadow-sm"
+  {actions.length === 0 && (
+    <button
+      className="text-white bg-purple-600 px-8 py-3 rounded-lg text-xl mb-10 flex items-center gap-2"
+      onClick={() => setShowActionPicker(true)}
     >
-      <label className="block text-xs font-semibold mb-1" htmlFor={`label-input-${idx}`}>
-        Button Label
-      </label>
-      <input
-        id={`label-input-${idx}`}
-        type="text"
-        className="w-full border-b border-blue-100 px-3 py-2 outline-none"
-        value={a.label}
-        onChange={e => updateAction(idx, "label", e.target.value)}
-        placeholder="Enter button label"
-        autoComplete="on"
-        maxLength={100}
-      />
+      <FaPlus /> Add Action
+    </button>
+  )}
+  {actions.length > 0 && (
+    <>
+      {actions.map((action, idx) => (
+  <ActionEditor
+    key={action.id || idx}
+    action={action}
+    onChange={updated => updateAction(idx, updated)}
+    onRemove={() => removeAction(idx)}
+    // Add these two lines:
+    profile={profile}
+    cardId={cardId}
+     setProfile={setProfile} // add this line!
+  />
+))}
 
-      {isModalAction ? (
-        <div className="text-xs text-gray-500 mt-2">
-          This button will always open a modal — no link required.
-        </div>
-      ) : (
-        <>
-          <label
-            className="block text-xs font-semibold mb-1 mt-2"
-            htmlFor={`url-input-${idx}`}
-          >
-            Link
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              id={`url-input-${idx}`}
-              type="url"
-              required={isRequired}
-              className="w-full border-b border-blue-100 px-3 py-2 outline-none overflow-x-auto whitespace-nowrap scrollbar-thin"
-              value={a.url}
-              onChange={e => {
-                let val = e.target.value;
-                // WhatsApp special handling → only numbers
-                if (label.includes("whatsapp")) {
-                  const raw = val.replace(/\D/g, "");
-                  val = raw ? `https://wa.me/${raw}` : "";
-                }
-                updateAction(idx, "url", val);
-              }}
-              placeholder={
-                label.includes("whatsapp")
-                  ? "Enter your number with country code (e.g. 27831234567)"
-                  : label.includes("youtube")
-                  ? "https://youtube.com/..."
-                  : label.includes("facebook")
-                  ? "https://facebook.com/..."
-                  : label.includes("linkedin")
-                  ? "https://linkedin.com/..."
-                  : "https://example.com"
-              }
-              autoComplete="off"
-              maxLength={400}
-            />
-            <button
-              className="border border-gray-200 bg-red-100 rounded px-3 py-2 text-red-600 flex-shrink-0"
-              onClick={() => removeAction(idx)}
-              type="button"
-              aria-label="Remove"
-            >
-              <FaTrash />
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-})}
-
-  <button
-    className="mt-1 w-full rounded-2xl bg-blue-600 text-white font-bold py-2 hover:bg-blue-700 transition"
-    type="button"
-    onClick={addAction}
-  >Add Action</button>
+      <button
+        className="mt-6 text-white bg-purple-700 px-8 py-3 rounded-lg text-xl flex items-center gap-2"
+        onClick={() => setShowActionPicker(true)}
+      >
+        <FaPlus /> Add Action
+      </button>
+    </>
+  )}
 </div>
 
 
-            <div className="w-full flex flex-col gap-2 mb-6 mt-6">
-              <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.linkedin}
-                     placeholder="LinkedIn Profile URL" onChange={e => updateProfileField("linkedin", e.target.value)} />
-              <input className="w-full border-b border-blue-100 py-2 outline-none text-center" value={profile.youtube}
-                     placeholder="YouTube Channel URL" onChange={e => updateProfileField("youtube", e.target.value)} />
-            <input className="w-full border-b border-blue-100 py-2 outline-none text-center" 
-       value={profile.email}
-       placeholder="Email" 
-       onChange={e => updateProfileField("email", e.target.value)} 
-       type="email" />
+            {/* ACTION CATEGORY PICKER */}
+            {showActionPicker && (
+              <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex relative">
+                  <div className="w-44 border-r py-6 px-4">
+                    {ACTION_TYPES.map(group => (
+                      <div
+                        key={group.group}
+                        className={`px-3 py-2 rounded cursor-pointer mb-1 ${activeGroup === group.group ? "bg-purple-100 font-bold" : "hover:bg-gray-100"}`}
+                        onClick={() => setActiveGroup(group.group)}
+                      >
+                        {group.group}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-1 py-6 px-8 max-h-[470px] overflow-auto">
+                    <input
+                      className="w-full border-b px-2 py-1 mb-4"
+                      placeholder="Paste or search a link"
+                      readOnly
+                    />
+                    <div>
+                     {ACTION_TYPES.find(g => g.group === activeGroup).options.map(opt => (
+  <button
+    key={opt.type}
+    onClick={async () => {
+      let value = "";
+      // For socials, get a value from the user
+      if (["email", "whatsapp", "youtube", "linkedin", "website"].includes(opt.type)) {
+        value = prompt(`Enter your ${opt.label}:`)?.trim();
+        // If value is not set or cancelled, still add action so user can fill/edit in form
+        // (if you don't want to add unless they enter something, uncomment this next line)
+        // if (!value) return; 
+      }
+      const { icon, desc, ...dataOnly } = opt;
+      setActions(actions => [
+        ...actions,
+        {
+          ...dataOnly,
+          value: value || "",
+          id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+        }
+      ]);
+      setShowActionPicker(false);
+    }}
+    className="flex items-center w-full text-left py-3 gap-3 border-b hover:bg-gray-50"
+  >
+    <div className="text-xl">{opt.icon}</div>
+    <div>
+      <b>{opt.label}</b>
+      <div className="text-xs text-gray-600">{opt.desc}</div>
+    </div>
+  </button>
+))}
 
-              <input
-  className="w-full border-b border-blue-100 py-2 outline-none text-center"
-  value={profile.whatsapp.replace("https://wa.me/", "")} // show only number
-  placeholder="Enter your number with country code (no spaces/special chars)"
-  onChange={e => {
-    // Remove non-digits
-    const raw = e.target.value.replace(/\D/g, "");
-    // Save as full wa.me link in profile
-    updateProfileField("whatsapp", raw ? `https://wa.me/${raw}` : "");
-  }}
-/>
 
-                     
-              <input
-    type="url"
-    className="w-full border-b border-blue-100 py-2 outline-none text-center"
-    value={profile.calendlyLink || ""}
-    placeholder="Calendly Link (optional)"
-    onChange={e => updateProfileField("calendlyLink", e.target.value)}
-  /></div>
-            <input className="w-full border-b border-blue-100 py-2 mt-6 mb-4 text-base font-semibold bg-transparent focus:outline-none placeholder-gray-400 text-center"
-                   value={profile.buttonLabel} onChange={e => updateProfileField("buttonLabel", e.target.value)}
-                   placeholder="Button label (e.g. Connect with me)" />
 
-                   
+                    </div>
+                  </div>
+                  <button
+                    className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-gray-800"
+                    onClick={() => setShowActionPicker(false)}
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
-  className="w-full bg-black text-white py-3 rounded-2xl font-bold text-lg hover:bg-gray-900 transition shadow"
-  onClick={handleSave}
-  disabled={showCrop}  // Prevents save while cropping
->
-  Save Card
-</button>
+              className="w-full bg-black text-white py-3 rounded-2xl font-bold text-lg hover:bg-gray-900 transition shadow mt-8"
+              onClick={handleSave}
+              disabled={showCrop}
+              >
+              Save Card
+            </button>
           </section>
         </div>
       </main>
@@ -1264,6 +1520,7 @@ function getIconTypeFromAction(action) {
               socials={socials}
               className="max-h-[85vh] overflow-y-auto"
               style={{ position: "relative" }}
+               socialIconColor={socialIconColor}   // <-- ADD THIS LINE!
             />
           </div>
         </div>

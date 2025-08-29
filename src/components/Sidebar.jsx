@@ -6,7 +6,7 @@ import "sweetalert2/dist/sweetalert2.min.css";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 
-// Sidebar navigation items (example)
+// Sidebar navigation items
 const navItems = [
   "Digital Cards",
   "Tap/NFC Cards",
@@ -15,7 +15,7 @@ const navItems = [
   "Analytics",
 ];
 
-// Utility: Detect mobile (for styling only if desired)
+// Utility: Detect mobile
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   React.useEffect(() => {
@@ -33,7 +33,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
 
   // Logout handler
   const handleLogout = async () => {
-    setSettingsOpen(false); // always close modal after
+    setSettingsOpen(false);
     const result = await Swal.fire({
       title: "Are you sure you want to logout?",
       icon: "warning",
@@ -65,16 +65,16 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
     }
   };
 
-  // Settings modal for all screens
+  // Settings modal (full-screen overlay on mobile)
   const settingsModal = settingsOpen && (
     <>
       <div
-        className="fixed inset-0 z-50 bg-black bg-opacity-40"
+        className="fixed inset-0 z-[99] bg-black bg-opacity-40"
         onClick={() => setSettingsOpen(false)}
         tabIndex={-1}
       />
       <div
-        className="fixed left-1/2 z-50 top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 w-[90vw] max-w-sm space-y-2"
+        className="fixed left-1/2 z-[100] top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 w-[92vw] max-w-sm space-y-2"
         style={{ maxHeight: "90vh", overflowY: "auto" }}
       >
         <div className="flex justify-between items-center mb-4">
@@ -137,10 +137,11 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
     </>
   );
 
+  // Always fixed, with NO vertical scroll on mobile (full screen, settings fixed at bottom)
   return (
     <>
-      {/* Sidebar Overlay for mobile (optional) */}
-      {open && (
+      {/* Sidebar dark overlay for mobile */}
+      {open && isMobile && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 z-30 md:hidden"
           onClick={onClose}
@@ -148,84 +149,83 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
         />
       )}
 
-     <aside
-  className={`fixed top-0 left-0 z-40 w-64 h-screen bg-white shadow-lg overflow-y-auto hide-scrollbar
+  <aside
+  className={`
+    fixed top-0 left-0 z-40 w-64 h-screen bg-white shadow-none
     flex flex-col
-    transform transition-transform duration-300 ease-in-out
-    ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static`}
+    transition-transform duration-300 ease-in-out
+    ${open ? "translate-x-0" : "-translate-x-full"} 
+    md:translate-x-0 md:static
+  `}
+  style={{
+    overflow: isMobile ? "hidden" : "auto",
+    boxShadow: "none",            // <--- overrides any class
+    WebkitBoxShadow: "none",      // <--- covers Safari/Chrome
+    MozBoxShadow: "none",         // <--- covers Firefox
+  }}
 >
-  <div className="py-6 px-6 border-b flex items-center justify-between">
-    <h1 className="text-2xl font-bold tracking-wide select-none">SB CARD</h1>
-  </div>
 
-  {/* Navigation */}
-  <nav className="flex-1 flex flex-col overflow-hidden">
-    <ul className="flex-1 overflow-auto hide-scrollbar">
-    {navItems.map((item) => (
-  <li
-    key={item}
-    className="px-6 py-3 hover:bg-gray-100 cursor-pointer text-gray-600 border-l-4 border-transparent hover:border-black font-semibold select-none"
-    onClick={() => {
-      if (item === "Digital Cards") {
-        navigate("/dashboard#digital-cards");
-      } else if (item === "Analytics") {
-        navigate("/analytics");
-      } else if (item === "Tap/NFC Cards") {
-         Swal.fire({
-    icon: "info",
-    title: "Page Under Development",
-    text: `The page "${item}" can't be opened yet. It is still under development.`,
-    confirmButtonText: "OK"
-  });
-      } else if (item === "Networking Toolkit") {
-         Swal.fire({
-    icon: "info",
-    title: "Page Under Development",
-    text: `The page "${item}" can't be opened yet. It is still under development.`,
-    confirmButtonText: "OK"
-  });
-      } else if (item === "Contact Book") {
-        navigate("/contacts");
-      } else {
-        alert(`${item} clicked`);
-      }
-      if (isMobile) onClose(); // always close sidebar on mobile after nav
-    }}
-  >
-    {item}
-  </li>
-))}
+        <div className="py-6 px-6 border-b flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-wide select-none">SB CARD</h1>
+        </div>
 
+        <nav className="flex-1 flex flex-col overflow-hidden">
+          <ul className="flex-1 overflow-auto hide-scrollbar">
+            {navItems.map((item) => (
+              <li
+                key={item}
+                className="px-6 py-3 hover:bg-gray-100 cursor-pointer text-gray-600 border-l-4 border-transparent hover:border-black font-semibold select-none"
+                onClick={() => {
+                  if (item === "Digital Cards") {
+                    navigate("/dashboard#digital-cards");
+                  } else if (item === "Analytics") {
+                    navigate("/analytics");
+                  } else if (item === "Tap/NFC Cards") {
+                    window.open("https://www.sbcard.co.za/product-category/nfc-cards/", "_blank");
+                  } else if (item === "Networking Toolkit") {
+                    Swal.fire({
+                      icon: "info",
+                      title: "Page Under Development",
+                      text: `"${item}" can't be opened yet. It is still under development.`,
+                      confirmButtonText: "OK"
+                    });
+                  } else if (item === "Contact Book") {
+                    navigate("/contacts");
+                  } else {
+                    alert(`${item} clicked`);
+                  }
+                  if (isMobile) onClose();
+                }}
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-    </ul>
-  </nav>
-
-  {/* Footer pinned at bottom */}
-  <footer className="p-6 border-t mt-auto select-none">
-    <div className="flex items-center space-x-3">
- 
-      <div className="truncate flex-1">
-        <span className="font-semibold text-black text-base">{loadingUser ? "..." : user.name ?? user.displayName}</span>
-           
-        <p className="text-xs text-gray-500 truncate">
-          {loadingUser ? "…" : user?.email}
-        </p>
-      </div>
-      {/* Cog/settings icon - always in footer */}
-      <button
-        aria-label="Open settings/actions modal"
-        onClick={() => setSettingsOpen(true)}
-        className="text-gray-600 hover:text-gray-800 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        type="button"
-        tabIndex={0}
-      >
-        <FaCog size={20} />
-      </button>
-    </div>
-  </footer>
-</aside>
-
-      {/* Modal with all actions, shown on any screen when cog clicked */}
+        {/* Footer always pinned at bottom */}
+        <footer className="p-6 border-t mt-auto select-none">
+          <div className="flex items-center space-x-3">
+            <div className="truncate flex-1">
+              <span className="font-semibold text-black text-base">{loadingUser ? "..." : user?.name ?? user?.displayName}</span>
+              <p className="text-xs text-gray-500 truncate">
+                {loadingUser ? "…" : user?.email}
+              </p>
+            </div>
+            {/* Settings/Cog icon always visible */}
+            <button
+              aria-label="Open settings/actions modal"
+              onClick={() => setSettingsOpen(true)}
+              className="text-gray-600 hover:text-gray-800 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="button"
+              tabIndex={0}
+            >
+              <FaCog size={20} />
+            </button>
+          </div>
+        </footer>
+      </aside>
+      {/* Full-screen modal for settings */}
       {settingsModal}
     </>
   );
