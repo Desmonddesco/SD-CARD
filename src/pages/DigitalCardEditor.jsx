@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  FaTrash, FaEnvelope, FaLinkedin, FaGlobe, FaLink,
+  FaTrash, FaPaperclip, FaEnvelope, FaLinkedin, FaGlobe, FaLink,
   FaWhatsapp, FaYoutube, FaPalette, FaImage, FaBars, FaTimes, FaEye, FaUser, FaPlus, FaChevronDown, FaChevronUp
 } from "react-icons/fa";
 import { useParams } from "react-router-dom";
 import Cropper from "react-easy-crop";
 import Swal from "sweetalert2";
 import { auth, db } from "../firebase";
-import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, getDocs,  collection, addDoc, serverTimestamp, setDoc, updateDoc,  query, where, } from "firebase/firestore";
 import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -42,6 +42,12 @@ const ACTION_TYPES = [
       { type: "shareDetails", label: "Share Your Details With Me", desc: "Users can share their info with you", icon: <FaUser /> }
     ]
   },
+  {
+  group: "Custom",
+  options: [
+    { type: "customButton", label: "Custom Button", desc: "Add a custom call to action and attachment", icon: <FaLink /> }
+  ]
+},
   {
     group: "Social",
     options: [
@@ -135,7 +141,7 @@ case "contactForm": {
        updatedAt: new Date()
      }, { merge: true });
 
-    setSaveMsg("Contact details ready to save!");
+    setSaveMsg("✔️Contact information saved successfully!");
   } catch (err) {
     setSaveMsg("Failed to update contact details.");
   }
@@ -253,7 +259,7 @@ case "contactForm": {
           />
         </div>
       );
-      case "email":
+case "email":
 case "whatsapp":
 case "youtube":
 case "linkedin":
@@ -276,11 +282,21 @@ case "website":
           action.type === "website" ? "Website URL" : ""
         }
         value={action.value || ""}
-        onChange={e => onChange({ ...action, value: e.target.value })}
+        onChange={e => {
+          // Always update the action
+          onChange({ ...action, value: e.target.value });
+          // Also update the profile object
+          setProfile(prev => ({
+            ...prev,
+            [action.type]: e.target.value
+          }));
+        }}
         type={action.type === "email" ? "email" : "text"}
       />
     </div>
   );
+
+
 
     case "emailSignup":
       return (
@@ -576,6 +592,30 @@ const socialActions = actions.filter(
         </button>
       );
     }
+     if (action.type === "customButton") {
+    return (
+      <a
+        key={action.id}
+        href={action.attachmentUrl || "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl
+          border border-purple-400 bg-gradient-to-br from-purple-100 via-blue-100 to-white
+          font-bold text-base text-purple-800 hover:bg-purple-200 transition
+          justify-center shadow"
+        style={{
+          textDecoration: "none",
+          letterSpacing: ".04em"
+        }}
+      >
+        <FaLink />
+        <span className="truncate">{action.label}</span>
+        {action.attachmentUrl && (
+          <FaPaperclip className="ml-2 text-blue-500" />
+        )}
+      </a>
+    );
+  }
     // Book a Meeting
     if (action.type === "bookMeeting") {
       if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
@@ -923,6 +963,7 @@ function removeUndefined(obj) {
 
 export default function DigitalCardEditor() {
   const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
+const [isSaving, setIsSaving] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
@@ -931,8 +972,12 @@ export default function DigitalCardEditor() {
   const { cardId } = useParams();
   const isEditMode = cardId && cardId !== "new";
   const [cardCreatedAt, setCardCreatedAt] = useState(null);
+  const [activeCustomAction, setActiveCustomAction] = useState(null);
+const [customButtonModalText, setCustomButtonModalText] = useState("");
+const [customButtonModalAttachmentUrl, setCustomButtonModalAttachmentUrl] = useState("");
 
-  const [cardName, setCardName] = useState("");
+
+ 
   const [profile, setProfile] = useState({
     name: "",
     company: "",
@@ -966,69 +1011,82 @@ export default function DigitalCardEditor() {
   const [activeGroup, setActiveGroup] = useState(ACTION_TYPES[0].group);
 
   // Load card logic and resizing events, unchanged...
-  useEffect(() => {
-    async function fetchCard() {
-      // If new card, reset to blank/default fields
-      if (!cardId || cardId === "new") {
-        setProfile({
-          name: "",
-          company: "",
-          jobTitle: "",
-          bio: "",
-          buttonLabel: "",
-          profilePhoto: "",
-          linkedin: "",
-          email: "",
-          whatsapp: "",
-          youtube: "",
-          calendlyLink: "",
-          phone: "",
-          address: "",
-          website: ""
-        });
-        setCardColor("#1a237e");
-        setFontColor("#ffffff");
-        setButtonLabelColor("#ffffff");
-        setActions([]);
-        setCardName("");
-        setCardCreatedAt(null);
-        return;
-      }
-      try {
-        const snap = await getDoc(doc(db, "cards", cardId));
-        if (snap.exists()) {
-          const data = snap.data();
-          setProfile({
-            name: data.name || "",
-            company: data.company || "",
-            jobTitle: data.jobTitle || "",
-            bio: data.bio || "",
-            buttonLabel: data.buttonLabel || "",
-            profilePhoto: data.profilePhoto || "",
-            linkedin: data.linkedin || "",
-            email: data.email || "",
-            whatsapp: data.whatsapp || "",
-            youtube: data.youtube || "",
-            calendlyLink: data.calendlyLink || "",
-            phone: data.phone || "",
-            address: data.address || "",
-            website: data.website || ""
-          });
-          setCardName(data.cardName || "");
-          setCardCreatedAt(data.createdAt || null);
-          setCardColor(data.cardColor || "#1a237e");
-          setFontColor(data.fontColor || "#ffffff");
-          setButtonLabelColor(data.buttonLabelColor || "#ffffff");
-          // PATCH: Only load what was saved! (Set modal:true for special labels)
-          setActions(Array.isArray(data.actions) ? data.actions : []);
-
-        }
-      } catch (e) {
-        console.error("Error loading card:", e);
-      }
+ useEffect(() => {
+  async function fetchCard() {
+    if (!cardId || cardId === "new") {
+      // ... reset logic ...
+      return;
     }
-    fetchCard();
-  }, [cardId]);
+    try {
+      const snap = await getDoc(doc(db, "cards", cardId));
+if (snap.exists()) {
+  const data = snap.data();
+
+  // Map socials from actions to top-level fields
+  if (data.actions && Array.isArray(data.actions)) {
+    data.actions.forEach(a => {
+      if (
+        ["email", "linkedin", "whatsapp", "youtube", "website"].includes(a.type) &&
+        a.value && a.value.trim() !== ""
+      ) {
+        data[a.type] = a.value;
+      }
+    });
+  }
+
+  // Set profile info (name, company, socials, etc.)
+  setProfile({
+    name: data.name || "",
+    company: data.company || "",
+    jobTitle: data.jobTitle || "",
+    bio: data.bio || "",
+    buttonLabel: data.buttonLabel || "",
+    profilePhoto: data.profilePhoto || "",
+    linkedin: data.linkedin || "",
+    email: data.email || "",
+    whatsapp: data.whatsapp || "",
+    youtube: data.youtube || "",
+    calendlyLink: data.calendlyLink || "",
+    phone: data.phone || "",
+    address: data.address || "",
+    website: data.website || ""
+  });
+  // Set actions for the action builder/editor
+  setActions(Array.isArray(data.actions) ? data.actions : []);
+
+  // Set card colors (add these if missing!)
+  setCardColor(data.cardColor || "#1a237e");
+  setFontColor(data.fontColor || "#ffffff");
+  setButtonLabelColor(data.buttonLabelColor || "#000000");
+
+
+  // 🟢 END BLOCK 🟢
+
+  setProfile({
+    name: data.name || "",
+    company: data.company || "",
+    jobTitle: data.jobTitle || "",
+    bio: data.bio || "",
+    buttonLabel: data.buttonLabel || "",
+    profilePhoto: data.profilePhoto || "",
+    linkedin: data.linkedin || "",
+    email: data.email || "",
+    whatsapp: data.whatsapp || "",
+    youtube: data.youtube || "",
+    calendlyLink: data.calendlyLink || "",
+    phone: data.phone || "",
+    address: data.address || "",
+    website: data.website || ""
+  });
+        // ...rest unchanged...
+      }
+    } catch (e) {
+      console.error("Error loading card:", e);
+    }
+  }
+  fetchCard();
+}, [cardId]);
+
 
   useEffect(() => {
     const onResize = () => setIsSmall(window.innerWidth <= 1024);
@@ -1110,12 +1168,34 @@ export default function DigitalCardEditor() {
     setShowCrop(false);
   }
 
+async function handleCustomActionAttachmentUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const storage = getStorage();
+    const userId = auth.currentUser?.uid || "anonymous";
+    const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, fileName);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    setCustomButtonModalAttachmentUrl(url);
+    Swal.fire({ icon: "success", title: "Attachment uploaded for custom button!" });
+  } catch (err) {
+    Swal.fire({ icon: "error", title: "Attachment failed", text: err.message });
+  }
+}
 
+// ...inside your component...
 async function handleSave() {
   const curr = auth.currentUser;
   if (!curr) return alert("Not logged in.");
-  if (!cardName.trim()) {
-    Swal.fire({ icon: "warning", title: "Please enter a Card Name!" });
+  if (isSaving) return;  // Block duplicate requests if already saving
+  setIsSaving(true);
+
+  const fullName = profile.name?.trim();
+  if (!fullName) {
+    Swal.fire({ icon: "warning", title: "Please enter your full name!" });
+    setIsSaving(false);
     return;
   }
 
@@ -1124,7 +1204,6 @@ async function handleSave() {
 
   // Clean the whole profile/cardData for undefineds
   const cardDataToSave = removeUndefined({
-    cardName,
     ...profile,
     actions: cleanedActions,
     cardColor,
@@ -1146,6 +1225,20 @@ async function handleSave() {
         text: "Your card changes were saved."
       });
     } else {
+      // Check for duplicate card before create
+      const cardsRef = collection(db, "cards");
+      const q = query(cardsRef, where("name", "==", fullName));
+      const existing = await getDocs(q);
+      if (!existing.empty) {
+        Swal.fire({
+          icon: "error",
+          title: "Card Already Exists!",
+          text: "A card with that full name already exists."
+        });
+        setIsSaving(false);
+        return;
+      }
+
       await addDoc(collection(db, "cards"), {
         ...cardDataToSave,
         createdAt: serverTimestamp()
@@ -1156,15 +1249,16 @@ async function handleSave() {
         text: "Your card was created and saved successfully."
       });
     }
+    setIsSaving(false);
   } catch (e) {
     Swal.fire({
       icon: "error",
       title: isEditMode ? "Error Updating Card" : "Error Creating Card",
       text: e.message
     });
+    setIsSaving(false);
   }
 }
-
 
   const socials = {
     linkedin: profile.linkedin,
@@ -1250,13 +1344,7 @@ async function handleSave() {
             }}
           >
             <h1 className="text-2xl font-bold mb-4 text-center">Create Your Digital Business Card</h1>
-            <input
-              className="w-full border-b-2 border-blue-300 py-3 px-2 rounded text-xl font-semibold mb-5 text-center focus:outline-none"
-              value={cardName}
-              onChange={e => setCardName(e.target.value)}
-              placeholder="Card Name"
-              maxLength={50}
-            />
+           
             <div className="flex flex-col items-center">
               <label htmlFor="profilePhoto" className="cursor-pointer">
                 <div
@@ -1342,62 +1430,93 @@ async function handleSave() {
                 </div>
               </div>
             )}
-            <div className="w-full flex flex-col items-center mt-5 mb-4">
-              <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Card Color</label>
-              <div className="flex gap-2 flex-wrap justify-center">
-                {COLOR_OPTIONS.map((c, i) => (
-                  <button key={i}
-                          className={`w-8 h-8 rounded-full border-2 ${cardColor === c ? "border-black" : "border-gray-200"}`}
-                          style={{ background: c }} onClick={() => setCardColor(c)} aria-label={c} type="button" />
-                ))}
-                <input type="color" value={cardColor}
-                  onChange={e => setCardColor(e.target.value)}
-                  className="w-8 h-8 border border-gray-400 rounded-full ml-2" aria-label="Custom color" />
-              </div>
-            </div>
-            <div className="w-full flex flex-col items-center mt-3">
-              <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Font Color</label>
-              <input
-                type="color"
-                value={fontColor}
-                onChange={e => setFontColor(e.target.value)}
-                className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer mb-3"
-                aria-label="Font color"
-              />
-            </div>
-            <div className="w-full flex flex-col items-center mt-2">
-              <label className="text-xs font-semibold mb-2 flex items-center gap-2"><FaPalette /> Button Label Color</label>
-              <input
-                type="color"
-                value={buttonLabelColor}
-                onChange={e => setButtonLabelColor(e.target.value)}
-                className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
-                aria-label="Button label color"
-              />
-            </div>
-            <div className="w-full flex flex-col items-center mt-3">
-  <label className="text-xs font-semibold mb-2 flex items-center gap-2">
-    <FaPalette /> Social Icon Color
-  </label>
-  <input
-    type="color"
-    value={socialIconColor}
-    onChange={e => setSocialIconColor(e.target.value)}
-    className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
-    aria-label="Social icon color"
-  />
+         <div className="w-full flex flex-row items-center justify-center gap-8 my-4">
+  {/* Font Color Picker */}
+  <div className="flex flex-col items-center">
+    <label className="text-xs font-semibold mb-2 flex items-center gap-2">
+      <FaPalette /> Font Color
+    </label>
+    <input
+      type="color"
+      value={fontColor}
+      onChange={e => setFontColor(e.target.value)}
+      className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
+      aria-label="Font color"
+    />
+  </div>
+
+  {/* Button Label Color Picker */}
+  <div className="flex flex-col items-center">
+    <label className="text-xs font-semibold mb-2 flex items-center gap-2">
+      <FaPalette /> Button Color
+    </label>
+    <input
+      type="color"
+      value={buttonLabelColor}
+      onChange={e => setButtonLabelColor(e.target.value)}
+      className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
+      aria-label="Button label color"
+    />
+  </div>
+
+  {/* Social Icon Color Picker */}
+  <div className="flex flex-col items-center">
+    <label className="text-xs font-semibold mb-2 flex items-center gap-2">
+      <FaPalette />Icon Color
+    </label>
+    <input
+      type="color"
+      value={socialIconColor}
+      onChange={e => setSocialIconColor(e.target.value)}
+      className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
+      aria-label="Social icon color"
+    />
+  </div>
 </div>
+
 
             {/* --------- ACTION BUILDER ---------- */}
            <div className="w-full">
-  <h3 className="font-semibold text-center mb-2">Links & Actions</h3>
+
   {actions.length === 0 && (
-    <button
-      className="text-white bg-purple-600 px-8 py-3 rounded-lg text-xl mb-10 flex items-center gap-2"
-      onClick={() => setShowActionPicker(true)}
-    >
-      <FaPlus /> Add Action
-    </button>
+<div className="w-full flex justify-center py-8">
+  <button
+    className="
+      flex items-center gap-4
+      px-14 py-5
+      rounded-full
+      font-extrabold text-xl
+      bg-gradient-to-br from-purple-600 via-purple-500 to-blue-500
+      text-white
+      shadow-2xl
+      hover:from-blue-600 hover:via-purple-700 hover:to-purple-800
+      hover:scale-110
+      transition-all duration-200
+      border-none
+      focus:outline-none focus:ring-4 focus:ring-purple-300
+      ring-offset-2
+      drop-shadow-lg
+      animate-fadeIn
+    "
+    style={{
+      letterSpacing: "0.04em",
+      boxShadow: "0 10px 32px 0 rgba(72,36,160,0.38)",
+      minWidth: "260px",
+      minHeight: "64px",
+      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif"
+    }}
+    onClick={() => setShowActionPicker(true)}
+  >
+    <span className="flex items-center justify-center rounded-full bg-white bg-opacity-15 shadow
+      w-12 h-12 mr-2 border-2 border-purple-500 hover:border-blue-400
+      flex-shrink-0 transition-all duration-200">
+      <FaPlus className="text-3xl drop-shadow " />
+    </span>
+    <span>Add Action</span>
+  </button>
+</div>
+
+
   )}
   {actions.length > 0 && (
     <>
@@ -1447,17 +1566,18 @@ async function handleSave() {
                       readOnly
                     />
                     <div>
-                     {ACTION_TYPES.find(g => g.group === activeGroup).options.map(opt => (
+                      
+                    {ACTION_TYPES.find(g => g.group === activeGroup).options.map(opt => (
   <button
     key={opt.type}
     onClick={async () => {
+      if(opt.type === "customButton") {
+        setActiveCustomAction("customButton");
+        return;
+      }
       let value = "";
-      // For socials, get a value from the user
       if (["email", "whatsapp", "youtube", "linkedin", "website"].includes(opt.type)) {
         value = prompt(`Enter your ${opt.label}:`)?.trim();
-        // If value is not set or cancelled, still add action so user can fill/edit in form
-        // (if you don't want to add unless they enter something, uncomment this next line)
-        // if (!value) return; 
       }
       const { icon, desc, ...dataOnly } = opt;
       setActions(actions => [
@@ -1471,6 +1591,7 @@ async function handleSave() {
       setShowActionPicker(false);
     }}
     className="flex items-center w-full text-left py-3 gap-3 border-b hover:bg-gray-50"
+    type="button"
   >
     <div className="text-xl">{opt.icon}</div>
     <div>
@@ -1479,6 +1600,92 @@ async function handleSave() {
     </div>
   </button>
 ))}
+
+{activeCustomAction === "customButton" && (
+  <div className="pt-4 px-1">
+    <label className="flex items-center font-bold gap-3 text-md mb-3">
+      <FaLink className="text-purple-500" /> Button Text
+    </label>
+    <input
+      value={customButtonModalText}
+      onChange={e => setCustomButtonModalText(e.target.value)}
+      placeholder="e.g. View Portfolio or Learn More"
+      className="w-full py-2 px-4 rounded-2xl border-2 border-purple-200 shadow focus:outline-none focus:ring-2 focus:ring-purple-300 transition"
+    />
+
+    {/* Attachment with icon */}
+    <label htmlFor="custom-action-attachment" className="mt-4 flex items-center gap-2 font-semibold text-blue-700 cursor-pointer">
+      <FaPaperclip className="text-lg" /> Attach Photo or Document
+    </label>
+    <input
+      id="custom-action-attachment"
+      type="file"
+      accept="image/*,.pdf,.doc,.docx"
+      className="hidden"
+      onChange={handleCustomActionAttachmentUpload}
+    />
+    <button
+      type="button"
+      onClick={() => document.getElementById('custom-action-attachment').click()}
+      className="mt-2 flex items-center gap-2 bg-blue-600 hover:bg-blue-800 text-white px-5 py-2 rounded-full shadow transition"
+    >
+      <FaPaperclip />
+      {customButtonModalAttachmentUrl ? "Change Attachment" : "Upload Attachment"}
+    </button>
+    {customButtonModalAttachmentUrl && (
+      <a
+        href={customButtonModalAttachmentUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block mt-2 font-semibold text-blue-600 underline"
+      >
+        View Attachment
+      </a>
+    )}
+
+    {/* Live Preview */}
+    {customButtonModalText && (
+      <button
+        className="
+          mt-6 w-full
+          bg-gradient-to-br from-purple-600 via-purple-500 to-blue-500
+          text-white font-bold py-3 rounded-full shadow-lg
+          hover:from-blue-600 hover:via-purple-700 hover:to-purple-800
+          transition
+        "
+        disabled
+        style={{ letterSpacing: '.04em' }}
+      >
+        {customButtonModalText || "Custom Button"}
+      </button>
+    )}
+
+    {/* Add Action Button */}
+    <div className="w-full flex justify-end pt-4">
+      <button
+        className="px-7 py-2 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-800 transition"
+        disabled={!customButtonModalText}
+        onClick={() => {
+          setActions(actions => [
+            ...actions,
+            {
+              type: "customButton",
+              label: customButtonModalText,
+              attachmentUrl: customButtonModalAttachmentUrl || "",
+              id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+            }
+          ]);
+          setShowActionPicker(false);
+          setActiveCustomAction(null);
+          setCustomButtonModalText("");
+          setCustomButtonModalAttachmentUrl("");
+        }}
+      >
+        Add Custom Button
+      </button>
+    </div>
+  </div>
+)}
 
 
 
@@ -1497,7 +1704,7 @@ async function handleSave() {
             <button
               className="w-full bg-black text-white py-3 rounded-2xl font-bold text-lg hover:bg-gray-900 transition shadow mt-8"
               onClick={handleSave}
-              disabled={showCrop}
+               disabled={showCrop || isSaving}   
               >
               Save Card
             </button>

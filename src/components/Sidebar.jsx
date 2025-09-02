@@ -137,7 +137,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
     </>
   );
 
-  // Always fixed, with NO vertical scroll on mobile (full screen, settings fixed at bottom)
+  // Sidebar overlay for mobile
   return (
     <>
       {/* Sidebar dark overlay for mobile */}
@@ -149,28 +149,29 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
         />
       )}
 
-  <aside
-  className={`
-    fixed top-0 left-0 z-40 w-64 h-screen bg-white shadow-none
-    flex flex-col
-    transition-transform duration-300 ease-in-out
-    ${open ? "translate-x-0" : "-translate-x-full"} 
-    md:translate-x-0 md:static
-  `}
-  style={{
-    overflow: isMobile ? "hidden" : "auto",
-    boxShadow: "none",            // <--- overrides any class
-    WebkitBoxShadow: "none",      // <--- covers Safari/Chrome
-    MozBoxShadow: "none",         // <--- covers Firefox
-  }}
->
-
+      <aside
+        className={`
+          fixed top-0 left-0 z-40 w-64 min-h-screen h-full bg-white
+          flex flex-col
+          transition-transform duration-300 ease-in-out
+          ${open ? "translate-x-0" : "-translate-x-full"} 
+          md:translate-x-0 md:static
+        `}
+        style={{
+          overflow: "hidden",
+          boxShadow: "none",
+          WebkitBoxShadow: "none",
+          MozBoxShadow: "none",
+        }}
+      >
+        {/* Logo/Header */}
         <div className="py-6 px-6 border-b flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-wide select-none">SB CARD</h1>
         </div>
 
+        {/* Main nav, scrolls if needed */}
         <nav className="flex-1 flex flex-col overflow-hidden">
-          <ul className="flex-1 overflow-auto hide-scrollbar">
+          <ul className="flex-1 overflow-y-auto hide-scrollbar">
             {navItems.map((item) => (
               <li
                 key={item}
@@ -203,22 +204,22 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           </ul>
         </nav>
 
-        {/* Footer always pinned at bottom */}
-        <footer className="p-6 border-t mt-auto select-none">
+        {/* Footer: Always visible & pinned */}
+        <footer className="p-6 border-t mt-auto select-none bg-white sticky bottom-0 z-10">
           <div className="flex items-center space-x-3">
             <div className="truncate flex-1">
-              <span className="font-semibold text-black text-base">{loadingUser ? "..." : user?.name ?? user?.displayName}</span>
+              <span className="font-semibold text-black text-base">
+                {loadingUser ? "..." : user?.name ?? user?.displayName}
+              </span>
               <p className="text-xs text-gray-500 truncate">
                 {loadingUser ? "…" : user?.email}
               </p>
             </div>
-            {/* Settings/Cog icon always visible */}
             <button
               aria-label="Open settings/actions modal"
               onClick={() => setSettingsOpen(true)}
               className="text-gray-600 hover:text-gray-800 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               type="button"
-              tabIndex={0}
             >
               <FaCog size={20} />
             </button>

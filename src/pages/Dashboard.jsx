@@ -74,7 +74,7 @@ function CardDisplay({ card, onEdit, onDelete, setCardToPreview, navigate }) {
       {/* Card Name */}
       <div className="w-full text-center mb-2">
        <div className="text-xs text-gray-400 font-medium w-full max-w-full overflow-hidden">
-  Card Name: <span className="font-semibold truncate break-words w-full max-w-full">{card.cardName || "-"}</span>
+  <span className="font-semibold truncate break-words w-full max-w-full">{card.name || "-"}</span>
 </div>
       </div>
 
