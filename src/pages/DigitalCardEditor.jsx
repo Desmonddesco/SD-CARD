@@ -1118,10 +1118,11 @@ export default function DigitalCardEditor() {
   
   const [cardCreatedAt, setCardCreatedAt] = useState(null);
   const [activeCustomAction, setActiveCustomAction] = useState(null);
-  const [customButtonModalText, setCustomButtonModalText] = useState("");
-  const [customButtonModalAttachmentUrl, setCustomButtonModalAttachmentUrl] = useState("");
-  
- 
+  // These states control the custom button modal fields
+const [customButtonLabel, setCustomButtonLabel] = useState("");
+const [customButtonUrl, setCustomButtonUrl] = useState("");
+const [customButtonAttachmentUrl, setCustomButtonAttachmentUrl] = useState("");
+
   const [profile, setProfile] = useState({
     name: "",
     company: "",
