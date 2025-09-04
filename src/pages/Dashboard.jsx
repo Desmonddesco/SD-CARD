@@ -9,7 +9,10 @@ import Swal from "sweetalert2";
 import DigitalCardPreview from "../components/DigitalCardPreview";
 import { motion } from "framer-motion";
 import CardThumbnail from "../components/CardThumbnail";
-import QRCodeGenerator from "../components/QRCodeGenerator"; // Adjust path if needed
+import QRCodeGenerator from "../components/QRCodeGenerator";
+
+// How many cards can 'free' users create?
+const FREE_CARD_LIMIT = 1;
 
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -21,24 +24,33 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-function getFirstWord(str) {
-  if (typeof str !== "string" || str.length === 0) return "";
-  return str.split(" ")[0] || "";
+function slugifyFullName(str = "") {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-]/g, "");
 }
 
-// Always show QR modal—with sharing, copy, and download for any card with a shareLink
-function showShareModal(card) {
+// Generates a shareable link using the full name slug
+function getShareUrl(fullName) {
+  return `${window.location.origin}/card/${slugifyFullName(fullName)}`;
+}
+
+// SweetAlert modal for QR/Share, disables actions if not premium
+function showShareModal(card, canShareQR) {
   Swal.fire({
-    title: "Share & Download QR",
-    html: `<div id="qr-modal-root"></div>`,
+    title: canShareQR ? "Share & Download QR" : "Upgrade Required",
+    html: `<div id="qr-modal-root"></div>${!canShareQR ? 
+      "<div style='color:#dc2626;margin-top:10px;'>Only Premium can share/download more than one card QR.<br/>Upgrade to access this feature.</div>" : ""}`,
     didOpen: () => {
-      // Dynamically render QRCodeGenerator into the SweetAlert modal
       import('react-dom').then(ReactDOM => {
         ReactDOM.createRoot(document.getElementById('qr-modal-root')).render(
           <QRCodeGenerator
             url={card.shareLink}
             cardName={card.name || "Digital Card"}
             title="Scan or share your card"
+            disabled={!canShareQR}
           />
         );
       });
@@ -49,7 +61,11 @@ function showShareModal(card) {
   });
 }
 
-function CardDisplay({ card, onEdit, onDelete, setCardToPreview, navigate }) {
+function CardDisplay({
+  card, onEdit, onDelete,
+  setCardToPreview, navigate,
+  canShareQR
+}) {
   const handleDeleteClick = e => {
     e.stopPropagation();
     Swal.fire({
@@ -69,7 +85,6 @@ function CardDisplay({ card, onEdit, onDelete, setCardToPreview, navigate }) {
       className="w-full sm:max-w-xs min-h-[180px] sm:min-h-[220px] rounded-2xl shadow-lg p-4 sm:p-7 flex flex-col items-center bg-white border transition cursor-pointer hover:border-blue-500"
       style={{ boxShadow: `0 6px 32px 0 rgba(60,60,90,0.10), 0 0 0 1.5px ${card.cardColor}44` }}
     >
-      {/* Live badge */}
       <div className="flex w-full justify-between items-center mb-2">
         <span className="inline-flex items-center px-3 py-1 rounded-lg bg-green-400 text-black font-bold text-sm shadow" style={{ fontFamily: 'inherit' }}>
           <svg className="mr-1" width="19" height="19" viewBox="0 0 24 24" fill="none">
@@ -111,11 +126,17 @@ function CardDisplay({ card, onEdit, onDelete, setCardToPreview, navigate }) {
           <FaEdit className="text-green-600 text-xl" />
         </motion.button>
         <motion.button
-          onClick={e => { e.stopPropagation(); showShareModal(card); }}
+          onClick={e => { e.stopPropagation(); showShareModal(card, canShareQR); }}
           tabIndex={0}
           aria-label="Share"
           type="button"
-          className="w-12 h-12 flex justify-center items-center rounded-full bg-white shadow-md border border-gray-200 hover:shadow-lg hover:bg-purple-50 transition"
+          className={`w-12 h-12 flex justify-center items-center rounded-full shadow-md border border-gray-200 transition
+            ${
+              canShareQR
+                ? "bg-white hover:shadow-lg hover:bg-purple-50"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }`}
+          disabled={!canShareQR}
         >
           <FaShareAlt className="text-purple-600 text-xl" />
         </motion.button>
@@ -143,6 +164,8 @@ const networkingTools = [
 ];
 
 const Dashboard = () => {
+  // Simulate subscription type. Replace with actual from your user profile/database.
+  const [subscription, setSubscription] = useState('free'); // 'free', 'premium', or 'admin'
   const [cardToPreview, setCardToPreview] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState({
@@ -174,6 +197,8 @@ const Dashboard = () => {
           email: curr.email,
           name: (userDoc.exists() && userDoc.data().name) ? userDoc.data().name : (curr.displayName || "User")
         });
+        // Optionally get subscription from userDoc.data().subscription
+        // setSubscription(userDoc.exists() ? userDoc.data().subscription : "free");
       } catch {
         setUser({
           displayName: curr.displayName || "User",
@@ -187,14 +212,27 @@ const Dashboard = () => {
       try {
         const q = query(collection(db, "cards"), where("userId", "==", curr.uid));
         const querySnap = await getDocs(q);
-        setCards(querySnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const cardList = querySnap.docs.map((docSnap, idx) => {
+          const cardData = docSnap.data();
+          const fullName = cardData.name || "card";
+          // Use fullName for shareLink
+          if (
+            (subscription === 'free' && idx === 0) ||
+            (subscription !== 'free')
+          ) {
+            return { id: docSnap.id, ...cardData, shareLink: getShareUrl(fullName) };
+          } else {
+            return { id: docSnap.id, ...cardData, shareLink: null };
+          }
+        });
+        setCards(cardList);
       } catch {
         setCards([]);
       }
       setLoadingCards(false);
     });
     return () => unsub();
-  }, []);
+  }, [subscription]);
 
   useEffect(() => {
     async function loadCards() {
@@ -203,11 +241,23 @@ const Dashboard = () => {
       if (!curr) { setCards([]); setLoadingCards(false); return; }
       const q = query(collection(db, "cards"), where("userId", "==", curr.uid));
       const querySnap = await getDocs(q);
-      setCards(querySnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const cardList = querySnap.docs.map((docSnap, idx) => {
+        const cardData = docSnap.data();
+        const fullName = cardData.name || "card";
+        if (
+          (subscription === 'free' && idx === 0) ||
+          (subscription !== 'free')
+        ) {
+          return { id: docSnap.id, ...cardData, shareLink: getShareUrl(fullName) };
+        } else {
+          return { id: docSnap.id, ...cardData, shareLink: null };
+        }
+      });
+      setCards(cardList);
       setLoadingCards(false);
     }
     loadCards();
-  }, []);
+  }, [subscription]);
 
   async function handleDelete(cardId) {
     try {
@@ -218,12 +268,26 @@ const Dashboard = () => {
     }
   }
 
+  function handleCreateCardClick() {
+    if (subscription === 'free' && cards.length >= FREE_CARD_LIMIT) {
+      Swal.fire({
+        icon: "info",
+        title: "Upgrade Required",
+        text: "Free subscription allows only one card. Upgrade to Premium to create more cards.",
+        showConfirmButton: true,
+        confirmButtonText: "Upgrade"
+      });
+    } else {
+      navigate("/digitalcardeditor/new");
+    }
+  }
+
   const greetingName = (() => {
     if (loadingUser) return "";
     const base = typeof user.name === "string" && user.name.trim().length > 0
-      ? getFirstWord(user.name)
+      ? user.name.split(" ")[0]
       : typeof user.displayName === "string" && user.displayName.trim().length > 0
-      ? getFirstWord(user.displayName)
+      ? user.displayName.split(" ")[0]
       : "";
     return base ? `WELCOME, ${String(base).toUpperCase()}` : "WELCOME";
   })();
@@ -328,9 +392,9 @@ const Dashboard = () => {
                 tabIndex={0}
                 role="button"
                 aria-label="Create Digital Card"
-                onClick={() => navigate("/digitalcardeditor/new")}
+                onClick={handleCreateCardClick}
                 onKeyDown={e => {
-                  if (e.key === "Enter" || e.key === " ") navigate("/digitalcardeditor/new");
+                  if (e.key === "Enter" || e.key === " ") handleCreateCardClick();
                 }}
                 style={{
                   outline: "none",
@@ -345,7 +409,7 @@ const Dashboard = () => {
               {loadingCards ? (
                 <div className="col-span-full text-gray-500 text-center py-10">Loading your cards...</div>
               ) : (
-                cards.length === 0 ? null : cards.map(card => (
+                cards.length === 0 ? null : cards.map((card, idx) => (
                   <CardDisplay
                     key={card.id}
                     card={card}
@@ -353,6 +417,10 @@ const Dashboard = () => {
                     onDelete={handleDelete}
                     setCardToPreview={setCardToPreview}
                     navigate={navigate}
+                    canShareQR={
+                      subscription !== 'free' ||
+                      (subscription === 'free' && idx === 0)
+                    }
                   />
                 ))
               )}

@@ -1,37 +1,33 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { QRCodeCanvas } from "qrcode.react";
 import DigitalCardPreview from "./DigitalCardPreview";
 
-// Beautiful blue-toned gradient combinations
+// Blue gradient palette
 const gradientBackgrounds = [
-  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", // Purple-Blue
-  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)", // Light Blue-Cyan
-  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)", // Green-Turquoise
-  "linear-gradient(135deg, #5f72bd 0%, #9b59b6 100%)", // Deep Blue-Purple
-  "linear-gradient(135deg, #3498db 0%, #2980b9 100%)", // Classic Blue
-  "linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)", // Light-Dark Blue
-  "linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)", // Sky Blue-Ocean Blue
-  "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)", // Navy Blue
-  "linear-gradient(135deg, #8360c3 0%, #2ebf91 100%)", // Purple-Teal
-  "linear-gradient(135deg, #70e1f5 0%, #ffd194 100%)"  // Light Blue-Soft Yellow
+  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+  "linear-gradient(135deg, #5f72bd 0%, #9b59b6 100%)",
+  "linear-gradient(135deg, #3498db 0%, #2980b9 100%)",
+  "linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)",
+  "linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)",
+  "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+  "linear-gradient(135deg, #8360c3 0%, #2ebf91 100%)",
+  "linear-gradient(135deg, #70e1f5 0%, #ffd194 100%)"
 ];
 
-// Function to get gradient based on card color
 function getGradientFromColor(cardColor) {
   if (!cardColor) return gradientBackgrounds[0];
-  
   const hex = cardColor.replace('#', '');
   const r = parseInt(hex.substr(0, 2), 16) / 255;
   const g = parseInt(hex.substr(2, 2), 16) / 255;
   const b = parseInt(hex.substr(4, 2), 16) / 255;
-  
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   let h = (max + min) / 2;
-  
   if (max !== min) {
     const d = max - min;
     const s = h > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -42,13 +38,20 @@ function getGradientFromColor(cardColor) {
     }
     h /= 6;
   }
-  
   const gradientIndex = Math.floor(h * gradientBackgrounds.length);
   return gradientBackgrounds[gradientIndex] || gradientBackgrounds[0];
 }
 
+function slugifyFullName(str) {
+  return (str || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-]/g, "");
+}
+
 function PublicCardView() {
-  const { cardId } = useParams();
+  const { cardId } = useParams(); // "cardId" is full name slug here!
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -57,17 +60,22 @@ function PublicCardView() {
   useEffect(() => {
     async function fetchCard() {
       if (!cardId) {
-        setError("Card ID not provided");
+        setError("Card name not provided in URL");
         setLoading(false);
         return;
       }
 
       try {
-        const cardDoc = await getDoc(doc(db, "cards", cardId));
-        if (cardDoc.exists()) {
-          const cardData = cardDoc.data();
-          
-          // Map socials from actions to top-level fields
+        // Find any card where uniqueUrl ends with `/card/{slug}`
+        const customUrl = `${window.location.origin}/card/${cardId.toLowerCase()}`;
+        const q = query(
+          collection(db, "cards"),
+          where("uniqueUrl", "==", customUrl)
+        );
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const cardData = snapshot.docs[0].data();
           if (cardData.actions && Array.isArray(cardData.actions)) {
             cardData.actions.forEach(a => {
               if (
@@ -78,25 +86,22 @@ function PublicCardView() {
               }
             });
           }
-
           setCard(cardData);
         } else {
-          setError("Card not found");
+          setError("Card not found.");
         }
       } catch (err) {
-        console.error("Error fetching card:", err);
-        setError("Failed to load card");
+        setError("Failed to load card.");
       } finally {
         setLoading(false);
       }
     }
-
     fetchCard();
   }, [cardId]);
 
   if (loading) {
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center"
         style={{ background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" }}
       >
@@ -110,15 +115,15 @@ function PublicCardView() {
 
   if (error) {
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center"
         style={{ background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)" }}
       >
         <div className="text-center p-8">
           <h1 className="text-2xl font-bold text-white mb-4">Card Not Found</h1>
           <p className="text-white mb-4">{error}</p>
-          <a 
-            href="/" 
+          <a
+            href="/"
             className="text-blue-200 hover:text-blue-100 underline"
           >
             Go to Homepage
@@ -129,18 +134,18 @@ function PublicCardView() {
   }
 
   const socials = {
-    linkedin: card.linkedin,
-    email: card.email,
-    whatsapp: card.whatsapp,
-    youtube: card.youtube,
-    website: card.website
+    linkedin: card?.linkedin,
+    email: card?.email,
+    whatsapp: card?.whatsapp,
+    youtube: card?.youtube,
+    website: card?.website
   };
 
-  const currentUrl = `${window.location.origin}/card/${cardId}`;
-  const backgroundGradient = getGradientFromColor(card.cardColor);
+  const currentUrl = `${window.location.origin}/card/${slugifyFullName(card?.name)}`;
+  const backgroundGradient = getGradientFromColor(card?.cardColor);
 
   return (
-    <div 
+    <div
       className="min-h-screen flex items-center justify-center py-8 px-4 relative overflow-hidden"
       style={{ background: backgroundGradient }}
     >
@@ -158,16 +163,15 @@ function PublicCardView() {
             boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
           }}
         />
-        
-        {/* Floating text below card */}
+
         <div className="text-center mt-6">
           <p className="text-white text-sm font-medium opacity-90">
             Powered by SB CARDS
           </p>
         </div>
       </div>
-      
-      {/* QR Code Toggle Button - Fixed Bottom Right - Always Visible */}
+
+      {/* QR Code Toggle Button - Fixed Bottom Right */}
       <div className="fixed bottom-8 right-8 z-50">
         <button
           onClick={() => setShowQR(!showQR)}
@@ -187,16 +191,13 @@ function PublicCardView() {
         </button>
       </div>
 
-      {/* QR Code Modal - Enhanced */}
+      {/* QR Code Modal */}
       {showQR && (
         <>
-          {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-60 z-40 backdrop-blur-sm"
             onClick={() => setShowQR(false)}
           />
-          
-          {/* QR Code Modal */}
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm mx-4">
             <div className="bg-white rounded-3xl p-8 shadow-2xl border border-gray-200">
               <div className="flex justify-between items-center mb-6">
@@ -208,7 +209,7 @@ function PublicCardView() {
                   ×
                 </button>
               </div>
-              
+
               <div className="flex justify-center mb-6">
                 <div className="bg-white p-4 rounded-2xl border-2 border-gray-100 shadow-sm">
                   <QRCodeCanvas
@@ -221,11 +222,11 @@ function PublicCardView() {
                   />
                 </div>
               </div>
-              
+
               <p className="text-sm text-gray-600 text-center mb-6 font-medium">
                 Scan to view <span className="font-bold">{card.name}</span>'s card
               </p>
-              
+
               <div className="space-y-3">
                 <button
                   onClick={() => {
@@ -245,7 +246,7 @@ function PublicCardView() {
                 >
                   📋 Copy Link
                 </button>
-                
+
                 <button
                   onClick={async () => {
                     if (navigator.share) {
@@ -269,8 +270,7 @@ function PublicCardView() {
                   📱 Share Card
                 </button>
               </div>
-              
-              {/* URL Display */}
+
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 break-all">
                   {currentUrl}

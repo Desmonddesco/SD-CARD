@@ -1110,6 +1110,7 @@ export default function DigitalCardEditor() {
   const cardScrollRef = useRef(null);
   const formScrollRef = useRef(null);
   
+  
   // Fix: Use local state for cardId that can be updated
   const { cardId: urlCardId } = useParams();
   const [cardId, setCardId] = useState(urlCardId || "new");
@@ -1137,6 +1138,17 @@ export default function DigitalCardEditor() {
     address: "",
     website: ""
   });
+  // Place this after 'profile' is declared
+  function slugifyFullName(str) {
+    return (str || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-]/g, "");
+  }
+  const fullNameSlug = slugifyFullName(profile.name);
+  const cardUrl = `${window.location.origin}/card/${fullNameSlug}`;
+  
   const [actions, setActions] = useState([]);
   const [cardColor, setCardColor] = useState("#1a237e");
   const [fontColor, setFontColor] = useState("#ffffff");
@@ -1328,6 +1340,7 @@ async function handleCustomActionAttachmentUpload(e) {
   }
 }
 
+
 // ...inside your component...
 async function handleSave() {
   const curr = auth.currentUser;
@@ -1341,54 +1354,44 @@ async function handleSave() {
     setIsSaving(false);
     return;
   }
+  const fullNameSlug = slugifyFullName(fullName);
 
-  // Clean actions: remove icon and any undefined values
   const cleanedActions = actions.map(({ icon, desc, ...rest }) => removeUndefined(rest));
 
   try {
     let cardDocRef;
-    let uniqueUrl;
+    let uniqueUrl = `${window.location.origin}/card/${fullNameSlug}`;
     let finalCardId;
 
+    // Check for duplicate full name URLs
+    const cardsRef = collection(db, "cards");
+    const q = query(cardsRef, where("uniqueUrl", "==", uniqueUrl));
+    const existing = await getDocs(q);
+    if (!existing.empty && (!isEditMode || (isEditMode && existing.docs[0].id !== cardId))) {
+      Swal.fire({
+        icon: "error",
+        title: "Name Already In Use!",
+        text: "A card with that full name link already exists. Please use a unique full name."
+      });
+      setIsSaving(false);
+      return;
+    }
+
     if (isEditMode) {
-      // For existing cards, use existing URL or generate new one
       cardDocRef = doc(db, "cards", cardId);
-      const existingCard = await getDoc(cardDocRef);
-      uniqueUrl = existingCard.data()?.uniqueUrl || `${window.location.origin}/card/${cardId}`;
       finalCardId = cardId;
     } else {
-      // Check for duplicate card before create
-      const cardsRef = collection(db, "cards");
-      const q = query(cardsRef, where("name", "==", fullName));
-      const existing = await getDocs(q);
-      if (!existing.empty) {
-        Swal.fire({
-          icon: "error",
-          title: "Card Already Exists!",
-          text: "A card with that full name already exists."
-        });
-        setIsSaving(false);
-        return;
-      }
-
-      // For new cards, create document first to get ID
       cardDocRef = await addDoc(collection(db, "cards"), {
         name: fullName,
         userId: curr.uid,
         createdAt: serverTimestamp(),
       });
       finalCardId = cardDocRef.id;
-      uniqueUrl = `${window.location.origin}/card/${finalCardId}`;
-      
-      // Update URL in browser to reflect the new card ID
       window.history.replaceState(null, null, `/card-editor/${finalCardId}`);
-      
-      // **IMPORTANT: Update the cardId state so component re-renders**
-      setCardId(finalCardId);  // Add this line!
-      setIsEditMode(true);     // Add this line!
+      setCardId(finalCardId);
+      setIsEditMode(true);
     }
 
-    // Clean the whole profile/cardData for undefineds
     const cardDataToSave = removeUndefined({
       ...profile,
       actions: cleanedActions,
@@ -1397,47 +1400,27 @@ async function handleSave() {
       buttonLabelColor,
       socialIconColor,
       userId: curr.uid,
-      uniqueUrl,
+      uniqueUrl: cardUrl, // <<--- Use here!
+      fullNameSlug,
       updatedAt: serverTimestamp()
     });
 
-    if (isEditMode && cardId !== "new") {
-      await setDoc(cardDocRef, {
-        ...cardDataToSave,
-        createdAt: cardCreatedAt || serverTimestamp()
-      }, { merge: true });
-      
-      Swal.fire({
-        icon: "success",
-        title: "Card Updated!",
-        html: `
-          <p>Your card changes were saved.</p>
-          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-            <strong>Share your card:</strong><br>
-            <a href="${uniqueUrl}" target="_blank" style="color: #007bff; word-break: break-all;">${uniqueUrl}</a>
-          </div>
-        `
-      });
-    } else {
-      // Update the newly created document with complete data
-      await setDoc(cardDocRef, {
-        ...cardDataToSave,
-        createdAt: serverTimestamp()
-      }, { merge: true });
-      
-      Swal.fire({
-        icon: "success",
-        title: "Card Created!",
-        html: `
-          <p>Your card was created and saved successfully.</p>
-          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-            <strong>Share your card:</strong><br>
-            <a href="${uniqueUrl}" target="_blank" style="color: #007bff; word-break: break-all;">${uniqueUrl}</a>
-          </div>
-        `
-      });
-    }
-    
+    await setDoc(cardDocRef, {
+      ...cardDataToSave,
+      createdAt: isEditMode ? (cardCreatedAt || serverTimestamp()) : serverTimestamp()
+    }, { merge: true });
+
+    Swal.fire({
+      icon: "success",
+      title: isEditMode ? "Card Updated!" : "Card Created!",
+      html: `
+        <p>${isEditMode ? "Your card changes were saved." : "Your card was created and saved successfully."}</p>
+        <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+          <strong>Share your card:</strong><br>
+          <a href="${uniqueUrl}" target="_blank" style="color: #007bff; word-break: break-all;">${uniqueUrl}</a>
+        </div>
+      `
+    });
     setIsSaving(false);
   } catch (e) {
     Swal.fire({
@@ -1448,6 +1431,7 @@ async function handleSave() {
     setIsSaving(false);
   }
 }
+
 
   const socials = {
     linkedin: profile.linkedin,
@@ -1948,28 +1932,39 @@ async function handleSave() {
             </button>
             {/* QR Code and Share Section */}
             {/* QR Code Section - ONLY show after card is actually saved (not "new") */}
-            {profile.name && cardId && cardId !== "new" && cardId !== undefined && !isSaving && isEditMode && (
-              <div className="w-full mt-8 p-4 border border-gray-200 rounded-2xl">
-                <h3 className="text-xl font-bold text-center mb-4">Share Your Card</h3>
-                <QRCodeGenerator 
-                  url={`${window.location.origin}/card/${cardId}`}
-                  title={`QR Code for ${profile.name}`}
-                  cardName={profile.name}
-                  size={180}
-                />
-                <div className="mt-4 text-center">
-                  <p className="text-sm text-gray-600 mb-2">Direct Link:</p>
-                  <a 
-                    href={`${window.location.origin}/card/${cardId}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 underline text-sm break-all"
-                  >
-                    {`${window.location.origin}/card/${cardId}`}
-                  </a>
-                </div>
-              </div>
-            )}
+          {/* Share Your Card / QR Section */}
+{profile.name && cardId && cardId !== "new" && isEditMode && !isSaving && (
+  <div className="w-full mt-8 p-4 border border-gray-200 rounded-2xl">
+    <h3 className="text-xl font-bold text-center mb-4">Share Your Card</h3>
+    <QRCodeGenerator 
+      url={cardUrl}
+      title={`QR Code for ${profile.name}`}
+      cardName={profile.name}
+      size={180}
+    />
+    <div className="mt-4 text-center">
+      <p className="text-sm text-gray-600 mb-2">Direct Link:</p>
+      <a 
+        href={cardUrl} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:text-blue-800 underline text-sm break-all"
+      >
+        {cardUrl}
+      </a>
+      {/* Paste the copy button here: */}
+      <div className="mt-2">
+        <button
+          onClick={() => navigator.clipboard.writeText(cardUrl)}
+          className="px-4 py-2 rounded bg-blue-600 text-white"
+        >
+          Copy Link
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
             
             {/* Show warning message for unsaved cards */}
             {/* Show warning message for unsaved cards */}
