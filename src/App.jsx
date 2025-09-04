@@ -12,6 +12,7 @@ import DigitalCardEditor from "./pages/DigitalCardEditor";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ContactBookPage from "./pages/ContactBookPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import PublicCardView from "./components/PublicCardView";
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
         <Route path="/DigitalCardEditor" element={<DigitalCardEditor />} />
         <Route path="/DigitalCardEditor/:cardId" element={<DigitalCardEditor />} />
       <Route path="/admin" element={<AdminDashboard />} />
+      <Route path="/card/:cardId" element={<PublicCardView />} />
 
         {/* Optionally, redirect lower-case "digital-card-editor" to PascalCase */}
         {/* <Route path="/digital-card-editor" element={<Navigate to="/DigitalCardEditor" />} /> */}

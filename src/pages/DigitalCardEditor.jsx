@@ -12,6 +12,7 @@ import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { getStorage, ref, uploadString, getDownloadURL,uploadBytes } from "firebase/storage";
+import QRCodeGenerator from "../components/QRCodeGenerator";
 
 
 
@@ -1101,21 +1102,24 @@ function removeUndefined(obj) {
 }
 
 export default function DigitalCardEditor() {
-  const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
-const [isSaving, setIsSaving] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+   const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
+  const [isSaving, setIsSaving] = useState(false);
+  
+    const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
   const cardScrollRef = useRef(null);
   const formScrollRef = useRef(null);
-  const { cardId } = useParams();
-  const isEditMode = cardId && cardId !== "new";
-
+  
+  // Fix: Use local state for cardId that can be updated
+  const { cardId: urlCardId } = useParams();
+  const [cardId, setCardId] = useState(urlCardId || "new");
+  const [isEditMode, setIsEditMode] = useState(urlCardId && urlCardId !== "new");
+  
   const [cardCreatedAt, setCardCreatedAt] = useState(null);
   const [activeCustomAction, setActiveCustomAction] = useState(null);
-const [customButtonLabel, setCustomButtonLabel] = useState("");
-const [customButtonUrl, setCustomButtonUrl] = useState("");
-const [customButtonAttachmentUrl, setCustomButtonAttachmentUrl] = useState("");
-
+  const [customButtonModalText, setCustomButtonModalText] = useState("");
+  const [customButtonModalAttachmentUrl, setCustomButtonModalAttachmentUrl] = useState("");
+  
  
   const [profile, setProfile] = useState({
     name: "",
@@ -1328,7 +1332,7 @@ async function handleCustomActionAttachmentUpload(e) {
 async function handleSave() {
   const curr = auth.currentUser;
   if (!curr) return alert("Not logged in.");
-  if (isSaving) return;  // Block duplicate requests if already saving
+  if (isSaving) return;
   setIsSaving(true);
 
   const fullName = profile.name?.trim();
@@ -1341,28 +1345,17 @@ async function handleSave() {
   // Clean actions: remove icon and any undefined values
   const cleanedActions = actions.map(({ icon, desc, ...rest }) => removeUndefined(rest));
 
-  // Clean the whole profile/cardData for undefineds
-  const cardDataToSave = removeUndefined({
-    ...profile,
-    actions: cleanedActions,
-    cardColor,
-    fontColor,
-    buttonLabelColor,
-    userId: curr.uid,
-    updatedAt: serverTimestamp()
-  });
-
   try {
+    let cardDocRef;
+    let uniqueUrl;
+    let finalCardId;
+
     if (isEditMode) {
-      await setDoc(doc(db, "cards", cardId), {
-        ...cardDataToSave,
-        createdAt: cardCreatedAt || serverTimestamp()
-      }, { merge: true });
-      Swal.fire({
-        icon: "success",
-        title: "Card Updated!",
-        text: "Your card changes were saved."
-      });
+      // For existing cards, use existing URL or generate new one
+      cardDocRef = doc(db, "cards", cardId);
+      const existingCard = await getDoc(cardDocRef);
+      uniqueUrl = existingCard.data()?.uniqueUrl || `${window.location.origin}/card/${cardId}`;
+      finalCardId = cardId;
     } else {
       // Check for duplicate card before create
       const cardsRef = collection(db, "cards");
@@ -1378,16 +1371,73 @@ async function handleSave() {
         return;
       }
 
-      await addDoc(collection(db, "cards"), {
+      // For new cards, create document first to get ID
+      cardDocRef = await addDoc(collection(db, "cards"), {
+        name: fullName,
+        userId: curr.uid,
+        createdAt: serverTimestamp(),
+      });
+      finalCardId = cardDocRef.id;
+      uniqueUrl = `${window.location.origin}/card/${finalCardId}`;
+      
+      // Update URL in browser to reflect the new card ID
+      window.history.replaceState(null, null, `/card-editor/${finalCardId}`);
+      
+      // **IMPORTANT: Update the cardId state so component re-renders**
+      setCardId(finalCardId);  // Add this line!
+      setIsEditMode(true);     // Add this line!
+    }
+
+    // Clean the whole profile/cardData for undefineds
+    const cardDataToSave = removeUndefined({
+      ...profile,
+      actions: cleanedActions,
+      cardColor,
+      fontColor,
+      buttonLabelColor,
+      socialIconColor,
+      userId: curr.uid,
+      uniqueUrl,
+      updatedAt: serverTimestamp()
+    });
+
+    if (isEditMode && cardId !== "new") {
+      await setDoc(cardDocRef, {
+        ...cardDataToSave,
+        createdAt: cardCreatedAt || serverTimestamp()
+      }, { merge: true });
+      
+      Swal.fire({
+        icon: "success",
+        title: "Card Updated!",
+        html: `
+          <p>Your card changes were saved.</p>
+          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            <strong>Share your card:</strong><br>
+            <a href="${uniqueUrl}" target="_blank" style="color: #007bff; word-break: break-all;">${uniqueUrl}</a>
+          </div>
+        `
+      });
+    } else {
+      // Update the newly created document with complete data
+      await setDoc(cardDocRef, {
         ...cardDataToSave,
         createdAt: serverTimestamp()
-      });
+      }, { merge: true });
+      
       Swal.fire({
         icon: "success",
         title: "Card Created!",
-        text: "Your card was created and saved successfully."
+        html: `
+          <p>Your card was created and saved successfully.</p>
+          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            <strong>Share your card:</strong><br>
+            <a href="${uniqueUrl}" target="_blank" style="color: #007bff; word-break: break-all;">${uniqueUrl}</a>
+          </div>
+        `
       });
     }
+    
     setIsSaving(false);
   } catch (e) {
     Swal.fire({
@@ -1896,6 +1946,48 @@ async function handleSave() {
               >
               Save Card
             </button>
+            {/* QR Code and Share Section */}
+            {/* QR Code Section - ONLY show after card is actually saved (not "new") */}
+            {profile.name && cardId && cardId !== "new" && cardId !== undefined && !isSaving && isEditMode && (
+              <div className="w-full mt-8 p-4 border border-gray-200 rounded-2xl">
+                <h3 className="text-xl font-bold text-center mb-4">Share Your Card</h3>
+                <QRCodeGenerator 
+                  url={`${window.location.origin}/card/${cardId}`}
+                  title={`QR Code for ${profile.name}`}
+                  cardName={profile.name}
+                  size={180}
+                />
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-600 mb-2">Direct Link:</p>
+                  <a 
+                    href={`${window.location.origin}/card/${cardId}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline text-sm break-all"
+                  >
+                    {`${window.location.origin}/card/${cardId}`}
+                  </a>
+                </div>
+              </div>
+            )}
+            
+            {/* Show warning message for unsaved cards */}
+            {/* Show warning message for unsaved cards */}
+            {profile.name && (!cardId || cardId === "new" || !isEditMode) && (
+              <div className="w-full mt-8 p-6 border border-yellow-200 bg-yellow-50 rounded-2xl text-center">
+                <div className="text-yellow-600 mb-3">
+                  <svg className="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-yellow-800 mb-2">Save Your Card First</h3>
+                <p className="text-yellow-700 mb-4">
+                  Create and save your digital business card to unlock QR code generation and sharing features.
+                </p>
+               
+              </div>
+            )}
+            
           </section>
         </div>
       </main>
