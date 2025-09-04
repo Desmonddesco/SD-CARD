@@ -1,8 +1,9 @@
 import React from "react";
 import Swal from "sweetalert2";
 import {
-  FaEnvelope, FaLinkedin, FaWhatsapp, FaYoutube, FaGlobe, FaImage, FaLink, FaUser
+   FaPaperclip, FaEnvelope, FaLinkedin, FaWhatsapp, FaYoutube, FaGlobe, FaImage, FaLink, FaUser
 } from "react-icons/fa";
+import { getStorage, ref, uploadString, getDownloadURL,uploadBytes } from "firebase/storage";
 
 // Social icons config and order
 const SOCIAL_ICON_MAP = {
@@ -30,14 +31,40 @@ function handleShowContactDetails(profile) {
         ${profile.phone ? `<div style="margin-top:13px;display:flex;align-items:center;gap:8px;"><span style="color:#1565c0;">📞</span><a href="tel:${profile.phone}" style="color:#1565c0;">${profile.phone}</a></div>` : ""}
         ${profile.address ? `<div style="margin-top:13px;display:flex;align-items:center;gap:8px;"><span style="color:#1565c0;">📍</span><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(profile.address)}" style="color:#1565c0;">${profile.address}</a></div>` : ""}
         ${profile.linkedin ? `<div style="margin-top:13px;display:flex;align-items:center;gap:8px;"><span style="font-size:15px;">🔗</span><a href="${profile.linkedin}" target="_blank" style="color:#1769aa;">LinkedIn Profile</a></div>` : ""}
+        <button id="saveVcfBtn"
+          style="
+            display:block;
+            margin:24px auto 0 auto;
+            background:#1565c0;
+            color:white;
+            font-weight:600;
+            border:none;
+            border-radius:7px;
+            padding:10px 22px;
+            cursor:pointer;
+            font-size:15px;
+            box-shadow:0 2px 8px rgba(21,101,192,0.07);
+            transition:background 0.2s;
+          "
+        >
+          Save to Contacts
+        </button>
       </div>
     `,
     showCloseButton: true,
     showConfirmButton: false,
     width: 350,
-    padding: '1.5em'
+    padding: '1.5em',
+    didOpen: () => {
+      // Attach handler after modal is rendered
+      const btn = Swal.getHtmlContainer().querySelector('#saveVcfBtn');
+      if (btn) {
+        btn.onclick = () => downloadContactVCF(profile);
+      }
+    }
   });
 }
+
 function handleShareDetailsModal(profile) {
   Swal.fire({
     title: "Share your details with me",
@@ -86,6 +113,29 @@ function handleShareDetailsModal(profile) {
     }
   });
 }
+function downloadContactVCF(profile) {
+  const vcf =
+    `BEGIN:VCARD\n` +
+    `VERSION:3.0\n` +
+    `FN:${profile.name ?? ""}\n` +
+    `ORG:${profile.company ?? ""}\n` +
+    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+    (profile.website ? `URL:${profile.website}\n` : "") +
+    (profile.email ? `EMAIL:${profile.email}\n` : "") +
+    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+    `END:VCARD`;
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+
 function handleRequestMeetingModal(profile) {
   Swal.fire({
     title: "Request a Meeting",
@@ -194,87 +244,128 @@ export default function DigitalCardPreview({
 </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-col gap-3 w-full mb-4 mt-2">
-        {actionButtons.map((action, idx) => {
-          if (action.type === "contactForm") {
-            return (
-              <button
-                key={action.id || idx}
-                className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-                style={{ color: buttonLabelColor, textDecoration: "none" }}
-                onClick={() => handleShowContactDetails(profile)}
-              >
-                {action.icon || <FaUser />}
-                <span className="truncate">{action.label || "My Contact Details"}</span>
-              </button>
-            );
-          }
-          if (action.type === "shareDetails") {
-            return (
-              <button
-                key={action.id || idx}
-                className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-                style={{ color: buttonLabelColor, textDecoration: "none" }}
-                onClick={() => handleShareDetailsModal(profile)}
-              >
-                {action.icon || <FaUser />}
-                <span className="truncate">{action.label || "Share Your Details With Me"}</span>
-              </button>
-            );
-          }
-          if (action.type === "bookMeeting") {
-            if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
-              return (
-                <a
-                  key={action.id || idx}
-                  href={profile.calendlyLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-                  style={{ color: buttonLabelColor, textDecoration: "none" }}
-                >
-                  {action.icon || <FaUser />}
-                  <span className="truncate">{action.label || "Book a Meeting"}</span>
-                </a>
-              );
-            }
-            return (
-              <button
-                key={action.id || idx}
-                className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-                style={{ color: buttonLabelColor, textDecoration: "none" }}
-                onClick={() => handleRequestMeetingModal(profile)}
-              >
-                {action.icon || <FaUser />}
-                <span className="truncate">{action.label || "Request a Meeting"}</span>
-              </button>
-            );
-          }
-          // Fallback: custom action
-          return (
-            <a
-              key={action.id || idx}
-              href={action.url || "#"}
-              target={action.url ? "_blank" : undefined}
-              rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-              style={{ color: buttonLabelColor, textDecoration: "none" }}
-            >
-              {action.icon || <FaLink />}
-              <span className="truncate">{action.label || action.url}</span>
-            </a>
-          );
-        })}
-      </div>
-      {/* CTA Button */}
-      {profile.buttonLabel && (
+<div className="flex flex-col gap-3 w-full mb-4 mt-2">
+  {actionButtons.map((action, idx) => {
+    if (action.type === "contactForm") {
+      return (
         <button
-          className="w-full bg-white font-semibold rounded-2xl py-3 text-lg mt-3 shadow hover:bg-gray-100 transition text-center"
-          style={{ color: "#000", textDecoration: "none" }}
+          key={action.id || idx}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+          onClick={() => handleShowContactDetails(profile)}
         >
-          {profile.buttonLabel}
+          {action.icon || <FaUser />}
+          <span className="truncate">{action.label || "My Contact Details"}</span>
         </button>
-      )}
+      );
+    }
+    if (action.type === "shareDetails") {
+      return (
+        <button
+          key={action.id || idx}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+          onClick={() => handleShareDetailsModal(profile)}
+        >
+          {action.icon || <FaUser />}
+          <span className="truncate">{action.label || "Share Your Details With Me"}</span>
+        </button>
+      );
+    }
+    if (action.type === "bookMeeting") {
+      if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
+        return (
+          <a
+            key={action.id || idx}
+            href={profile.calendlyLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+            style={{ color: buttonLabelColor, textDecoration: "none" }}
+          >
+            {action.icon || <FaUser />}
+            <span className="truncate">{action.label || "Book a Meeting"}</span>
+          </a>
+        );
+      }
+      return (
+        <button
+          key={action.id || idx}
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+          onClick={() => handleRequestMeetingModal(profile)}
+        >
+          {action.icon || <FaUser />}
+          <span className="truncate">{action.label || "Request a Meeting"}</span>
+        </button>
+      );
+    }
+
+    // ----- Custom Button for Attachment -----
+    if (action.type === "customButtonAttachment") {
+      return (
+        <a
+          key={action.id || idx}
+          href={action.attachmentUrl || "#"}
+          target={action.attachmentUrl ? "_blank" : undefined}
+          rel="noopener noreferrer"
+          className="w-full flex items-center gap-2 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20 shadow"
+          style={{
+            color: buttonLabelColor,
+            textDecoration: "none",
+            letterSpacing: ".04em"
+          }}
+        >
+          <FaPaperclip />
+          <span className="truncate">{action.label}</span>
+        </a>
+      );
+    }
+
+    // ----- Custom Button for Link (optional explicit case) -----
+    if (action.type === "customButtonLink") {
+      return (
+        <a
+          key={action.id || idx}
+          href={action.url || "#"}
+          target={action.url ? "_blank" : undefined}
+          rel="noopener noreferrer"
+          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20 shadow"
+          style={{ color: buttonLabelColor, textDecoration: "none" }}
+        >
+          <FaLink />
+          <span className="truncate">{action.label}</span>
+        </a>
+      );
+    }
+
+    // Fallback: any other custom/link action
+    return (
+      <a
+        key={action.id || idx}
+        href={action.url || "#"}
+        target={action.url ? "_blank" : undefined}
+        rel="noopener noreferrer"
+        className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+        style={{ color: buttonLabelColor, textDecoration: "none" }}
+      >
+        {action.icon || <FaLink />}
+        <span className="truncate">{action.label || action.url}</span>
+      </a>
+    );
+  })}
+</div>
+
+{/* CTA Button */}
+{profile.buttonLabel && (
+  <button
+    className="w-full bg-white font-semibold rounded-2xl py-3 text-lg mt-3 shadow hover:bg-gray-100 transition text-center"
+    style={{ color: "#000", textDecoration: "none" }}
+  >
+    {profile.buttonLabel}
+  </button>
+)}
+
     </div>
   );
 }

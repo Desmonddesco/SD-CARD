@@ -2,20 +2,19 @@ import React, { useState } from "react";
 import { FaCog } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import "sweetalert2/dist/sweetalert2.min.css";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
+import "sweetalert2/dist/sweetalert2.min.css";
 
-// Sidebar navigation items
+// Navigation items
 const navItems = [
-  "Digital Cards",
-  "Tap/NFC Cards",
-  "Networking Toolkit",
-  "Contact Book",
-  "Analytics",
+  { label: "Digital Cards", path: "/dashboard#digital-cards" },
+  { label: "Tap/NFC Cards", external: "https://www.sbcard.co.za/product-category/nfc-cards/" },
+  { label: "Networking Toolkit", comingSoon: true },
+  { label: "Contact Book", path: "/contacts" },
+  { label: "Analytics", path: "/analytics" }
 ];
 
-// Utility: Detect mobile
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
   React.useEffect(() => {
@@ -35,13 +34,14 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
   const handleLogout = async () => {
     setSettingsOpen(false);
     const result = await Swal.fire({
-      title: "Are you sure you want to logout?",
+      title: "Logout?",
+      text: "Are you sure you want to logout?",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
       cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, log me out",
-      cancelButtonText: "No, stay logged in",
+      confirmButtonText: "Yes",
+      cancelButtonText: "No"
     });
     if (result.isConfirmed) {
       try {
@@ -52,24 +52,24 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           icon: "success",
           showConfirmButton: false,
           timer: 1200,
-          timerProgressBar: true,
+          timerProgressBar: true
         });
         navigate("/login");
       } catch (err) {
         await Swal.fire({
           title: "Error",
           text: "Failed to logout. Please try again.",
-          icon: "error",
+          icon: "error"
         });
       }
     }
   };
 
-  // Settings modal (full-screen overlay on mobile)
+  // Settings modal
   const settingsModal = settingsOpen && (
     <>
       <div
-        className="fixed inset-0 z-[99] bg-black bg-opacity-40"
+        className="fixed inset-0 z-[99] bg-black/40"
         onClick={() => setSettingsOpen(false)}
         tabIndex={-1}
       />
@@ -88,20 +88,20 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           </button>
         </div>
         <button
-          className="w-full text-left py-2 hover:bg-gray-100 rounded px-1 mb-1"
+          className="w-full text-left py-2 px-2 hover:bg-gray-100 rounded mb-1"
           onClick={() => { setSettingsOpen(false); alert("Upgrade Plan clicked"); }}
         >
           Upgrade Plan
         </button>
         <button
-          className="w-full text-left py-2 hover:bg-gray-100 rounded px-1 mb-1"
+          className="w-full text-left py-2 px-2 hover:bg-gray-100 rounded mb-1"
           onClick={() => { setSettingsOpen(false); navigate("/ProfileSettingsPage"); }}
         >
           Settings
         </button>
         <a
           href=""
-          className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
+          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => setSettingsOpen(false)}
@@ -110,7 +110,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
         </a>
         <a
           href=""
-          className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
+          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => setSettingsOpen(false)}
@@ -119,7 +119,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
         </a>
         <a
           href=""
-          className="block w-full py-2 hover:bg-gray-100 rounded px-1 mb-1"
+          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => setSettingsOpen(false)}
@@ -127,7 +127,7 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
           Roadmap
         </a>
         <button
-          className="w-full text-left py-2 px-1 text-red-600 border font-semibold hover:bg-red-600 hover:text-white rounded transition"
+          className="w-full text-left py-2 px-2 text-red-600 border font-semibold hover:bg-red-600 hover:text-white rounded transition"
           onClick={handleLogout}
           type="button"
         >
@@ -140,7 +140,6 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
   // Sidebar overlay for mobile
   return (
     <>
-      {/* Sidebar dark overlay for mobile */}
       {open && isMobile && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 z-30 md:hidden"
@@ -149,84 +148,74 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
         />
       )}
 
-      <aside
+      <nav
         className={`
-          fixed top-0 left-0 z-40 w-64 min-h-screen h-full bg-white
-          flex flex-col
-          transition-transform duration-300 ease-in-out
-          ${open ? "translate-x-0" : "-translate-x-full"} 
-          md:translate-x-0 md:static
+          fixed top-0 left-0 z-40 h-full w-64 border-r border-gray-200 bg-white flex-shrink-0 
+          overflow-y-auto hide-scrollbar transform transition-transform duration-300
+          ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static
         `}
-        style={{
-          overflow: "hidden",
-          boxShadow: "none",
-          WebkitBoxShadow: "none",
-          MozBoxShadow: "none",
-        }}
+        aria-label="Sidebar Navigation"
+        style={{ backgroundColor: "#fff" }}
       >
-        {/* Logo/Header */}
-        <div className="py-6 px-6 border-b flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-wide select-none">SB CARD</h1>
-        </div>
-
-        {/* Main nav, scrolls if needed */}
-        <nav className="flex-1 flex flex-col overflow-hidden">
-          <ul className="flex-1 overflow-y-auto hide-scrollbar">
+        <div className="px-6 py-8 flex flex-col h-full">
+          <h1 className="text-2xl font-bold tracking-wide select-none mb-8">SB CARD</h1>
+          <ul className="flex-grow space-y-2 mb-8">
             {navItems.map((item) => (
               <li
-                key={item}
-                className="px-6 py-3 hover:bg-gray-100 cursor-pointer text-gray-600 border-l-4 border-transparent hover:border-black font-semibold select-none"
+                key={item.label}
+                className="px-2 py-3 rounded-lg font-semibold text-gray-600 hover:bg-gray-100 hover:text-black cursor-pointer transition select-none"
                 onClick={() => {
-                  if (item === "Digital Cards") {
-                    navigate("/dashboard#digital-cards");
-                  } else if (item === "Analytics") {
-                    navigate("/analytics");
-                  } else if (item === "Tap/NFC Cards") {
-                    window.open("https://www.sbcard.co.za/product-category/nfc-cards/", "_blank");
-                  } else if (item === "Networking Toolkit") {
+                  if (item.comingSoon) {
                     Swal.fire({
                       icon: "info",
                       title: "Page Under Development",
-                      text: `"${item}" can't be opened yet. It is still under development.`,
+                      text: `"${item.label}" can't be opened yet. It is still under development.`,
                       confirmButtonText: "OK"
                     });
-                  } else if (item === "Contact Book") {
-                    navigate("/contacts");
+                  } else if (item.external) {
+                    window.open(item.external, "_blank");
+                  } else if (item.path) {
+                    navigate(item.path);
                   } else {
-                    alert(`${item} clicked`);
+                    alert(`${item.label} clicked`);
                   }
                   if (isMobile) onClose();
                 }}
               >
-                {item}
+                {item.label}
               </li>
             ))}
           </ul>
-        </nav>
 
-        {/* Footer: Always visible & pinned */}
-        <footer className="p-6 border-t mt-auto select-none bg-white sticky bottom-0 z-10">
-          <div className="flex items-center space-x-3">
-            <div className="truncate flex-1">
-              <span className="font-semibold text-black text-base">
-                {loadingUser ? "..." : user?.name ?? user?.displayName}
-              </span>
-              <p className="text-xs text-gray-500 truncate">
-                {loadingUser ? "…" : user?.email}
-              </p>
+          {/* Profile, settings, logout: always shown under nav */}
+          <div className="py-4 px-2 border-t bg-white">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="truncate flex-1">
+                <span className="font-semibold text-black text-base">
+                  {loadingUser ? "..." : user?.name ?? user?.displayName}
+                </span>
+                <p className="text-xs text-gray-500 truncate">
+                  {loadingUser ? "…" : user?.email}
+                </p>
+              </div>
+              <button
+                aria-label="Open settings/actions modal"
+                onClick={() => setSettingsOpen(true)}
+                className="text-gray-600 hover:text-gray-800 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                type="button"
+              >
+                <FaCog size={20} />
+              </button>
             </div>
             <button
-              aria-label="Open settings/actions modal"
-              onClick={() => setSettingsOpen(true)}
-              className="text-gray-600 hover:text-gray-800 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              type="button"
+              onClick={handleLogout}
+              className="mt-2 text-red-600 border border-red-600 px-4 py-2 w-full rounded font-semibold hover:bg-red-600 hover:text-white transition"
             >
-              <FaCog size={20} />
+              Logout
             </button>
           </div>
-        </footer>
-      </aside>
-      {/* Full-screen modal for settings */}
+        </div>
+      </nav>
       {settingsModal}
     </>
   );

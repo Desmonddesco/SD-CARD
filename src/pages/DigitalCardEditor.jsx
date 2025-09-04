@@ -11,7 +11,7 @@ import { doc, getDoc, getDocs,  collection, addDoc, serverTimestamp, setDoc, upd
 import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadString, getDownloadURL,uploadBytes } from "firebase/storage";
 
 
 
@@ -45,7 +45,18 @@ const ACTION_TYPES = [
   {
   group: "Custom",
   options: [
-    { type: "customButton", label: "Custom Button", desc: "Add a custom call to action and attachment", icon: <FaLink /> }
+    {
+      type: "customButtonLink",
+      label: "Button (Link)",
+      desc: "Add a button that opens a website or link",
+      icon: <FaLink />
+    },
+    {
+      type: "customButtonAttachment",
+      label: "Button (Attachment)",
+      desc: "Add a button that opens an attached photo or document",
+      icon: <FaPaperclip />
+    }
   ]
 },
   {
@@ -225,7 +236,105 @@ case "contactForm": {
       )}
     </div>
   );
-}
+}case "customButtonLink":
+  return (
+    <div className="border rounded-xl p-4 mb-4 bg-white">
+      <div className="flex justify-between items-center mb-1">
+        <b className="flex items-center gap-2">
+          <FaLink className="text-purple-600" />Button (Link)
+        </b>
+        <button className="text-red-500" onClick={onRemove} title="Delete">
+          <FaTimes />
+        </button>
+      </div>
+      <input
+        className="w-full border-b my-1 py-1 px-2 font-semibold"
+        placeholder="Button Text"
+        value={action.label || ""}
+        onChange={e => onChange({ ...action, label: e.target.value })}
+        maxLength={48}
+      />
+      <input
+        className="w-full border-b my-1 py-1 px-2"
+        placeholder="Button Link (https://...)"
+        value={action.url || ""}
+        onChange={e => onChange({ ...action, url: e.target.value })}
+        type="url"
+        maxLength={256}
+      />
+    </div>
+  );
+
+case "customButtonAttachment":
+  return (
+    <div className="border rounded-xl p-4 mb-4 bg-white">
+      <div className="flex justify-between items-center mb-1">
+        <b className="flex items-center gap-2">
+          <FaPaperclip className="text-purple-600" />Button (Attachment)
+        </b>
+        <button className="text-red-500" onClick={onRemove} title="Delete">
+          <FaTimes />
+        </button>
+      </div>
+      <input
+        className="w-full border-b my-1 py-1 px-2 font-semibold"
+        placeholder="Button Text"
+        value={action.label || ""}
+        onChange={e => onChange({ ...action, label: e.target.value })}
+        maxLength={48}
+      />
+      {/* Attachment: upload/view/remove */}
+      {action.attachmentUrl ? (
+        <div className="flex items-center gap-3 mt-3">
+          <a
+            href={action.attachmentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-10 h-10 bg-green-600 hover:bg-green-800 rounded-full shadow transition"
+            title="View Attachment"
+          >
+            <FaPaperclip className="text-white text-lg" />
+          </a>
+          <button
+            type="button"
+            className="flex items-center justify-center w-10 h-10 bg-red-600 hover:bg-red-800 rounded-full shadow transition"
+            title="Remove Attachment"
+            onClick={() => onChange({ ...action, attachmentUrl: "" })}
+          >
+            <FaTrash className="text-white text-lg" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mt-3">
+          <label
+            htmlFor={`edit-custom-attachment-${action.id}`}
+            className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-800 rounded-full cursor-pointer shadow transition"
+            title="Upload Attachment"
+          >
+            <FaPaperclip className="text-white text-lg" />
+            <input
+              id={`edit-custom-attachment-${action.id}`}
+              type="file"
+              accept="image/*,.pdf,.doc,.docx"
+              className="hidden"
+              onChange={async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const storage = getStorage();
+                const userId = auth.currentUser?.uid || "anonymous";
+                const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
+                const storageRef = ref(storage, fileName);
+                await uploadBytes(storageRef, file);
+                const url = await getDownloadURL(storageRef);
+                onChange({ ...action, attachmentUrl: url });
+              }}
+            />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+
         case "bookMeeting":
       return (
         <div className="border rounded-xl p-4 mb-4 bg-white">
@@ -499,18 +608,28 @@ const socialActions = actions.filter(
 <div className="flex gap-4 mb-3">
   {socialActions.map(a => {
     let href = "#";
-    if (a.type === "email") href = `mailto:${a.value}`;
-    else if (a.type === "whatsapp")
-      href = a.value.startsWith("http") ? a.value : `https://wa.me/${a.value.replace(/[^0-9]/g, "")}`;
-    else href = a.value;
+    let extraProps = {};
+    if (a.type === "email") {
+      href = `mailto:${a.value}`;
+      // Do not add target="_blank" for mailto!
+    } else if (a.type === "whatsapp") {
+      const number = (a.value || "").replace(/[^0-9]/g, "");
+      href = number ? `https://wa.me/${number}` : "#";
+      extraProps = { target: "_blank", rel: "noopener noreferrer" };
+    } else if (a.value && a.value.startsWith("http")) {
+      href = a.value;
+      extraProps = { target: "_blank", rel: "noopener noreferrer" };
+    } else {
+      href = a.value || "#";
+      extraProps = { target: "_blank", rel: "noopener noreferrer" };
+    }
     return (
       <a
         key={a.type}
         className="hover:opacity-80 transition"
-        style={{ color: socialIconColor }}    // <-- THIS is the LIVE color!
+        style={{ color: socialIconColor }}
         href={href}
-        target="_blank"
-        rel="noopener noreferrer"
+        {...extraProps}
       >
         {ICONS[a.type] || <FaLink size={22} />}
       </a>
@@ -577,7 +696,7 @@ const socialActions = actions.filter(
         })}
       </div>
       <div className="flex flex-col gap-3 w-full mb-4 mt-2">
-  {actions.filter(a => a.modal === true || ["contactForm", "bookMeeting", "shareDetails"].includes(a.type)).map((action, idx) => {
+  {actions.map((action, idx) => {
     // Contact Form (My Contact Details)
     if (action.type === "contactForm") {
       return (
@@ -592,30 +711,49 @@ const socialActions = actions.filter(
         </button>
       );
     }
-     if (action.type === "customButton") {
-    return (
-      <a
-        key={action.id}
-        href={action.attachmentUrl || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl
-          border border-purple-400 bg-gradient-to-br from-purple-100 via-blue-100 to-white
-          font-bold text-base text-purple-800 hover:bg-purple-200 transition
-          justify-center shadow"
-        style={{
-          textDecoration: "none",
-          letterSpacing: ".04em"
-        }}
-      >
-        <FaLink />
-        <span className="truncate">{action.label}</span>
-        {action.attachmentUrl && (
-          <FaPaperclip className="ml-2 text-blue-500" />
-        )}
-      </a>
-    );
-  }
+    // Custom Button for Link
+if (action.type === "customButtonLink") {
+  return (
+   <a
+  key={action.id}
+  href={action.url || "#"}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border bg-white/10 border-white font-semibold text-base transition hover:bg-white/20 shadow"
+  style={{
+    color: buttonLabelColor,
+    textDecoration: "none",
+    letterSpacing: ".04em"
+  }}
+>
+  <FaLink />
+  <span className="ml-1 truncate">{action.label}</span>
+</a>
+
+  );
+}
+
+// Custom Button for Attachment
+if (action.type === "customButtonAttachment") {
+  return (
+    <a
+      key={action.id || idx}
+      href={action.attachmentUrl || "#"}
+      target={action.attachmentUrl ? "_blank" : undefined}
+      rel="noopener noreferrer"
+      className="w-full flex items-center gap-2 px-5 py-3 rounded-2xl border bg-white/10 border-white font-semibold text-base transition hover:bg-white/20 shadow"
+      style={{
+        color: buttonLabelColor,
+        textDecoration: "none",
+        letterSpacing: ".04em"
+      }}
+    >
+      <FaPaperclip />
+      <span className="truncate">{action.label}</span>
+    </a>
+  );
+}
+
     // Book a Meeting
     if (action.type === "bookMeeting") {
       if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
@@ -660,6 +798,7 @@ const socialActions = actions.filter(
         </button>
       );
     }
+     if (["email", "whatsapp", "youtube", "linkedin", "website"].includes(action.type)) {/*...*/}
     // Custom fallback (shouldn't be reached)
     return null;
   })}
@@ -964,18 +1103,18 @@ function removeUndefined(obj) {
 export default function DigitalCardEditor() {
   const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
 const [isSaving, setIsSaving] = useState(false);
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
   const cardScrollRef = useRef(null);
   const formScrollRef = useRef(null);
   const { cardId } = useParams();
   const isEditMode = cardId && cardId !== "new";
+
   const [cardCreatedAt, setCardCreatedAt] = useState(null);
   const [activeCustomAction, setActiveCustomAction] = useState(null);
-const [customButtonModalText, setCustomButtonModalText] = useState("");
-const [customButtonModalAttachmentUrl, setCustomButtonModalAttachmentUrl] = useState("");
-
+const [customButtonLabel, setCustomButtonLabel] = useState("");
+const [customButtonUrl, setCustomButtonUrl] = useState("");
+const [customButtonAttachmentUrl, setCustomButtonAttachmentUrl] = useState("");
 
  
   const [profile, setProfile] = useState({
@@ -1123,7 +1262,7 @@ if (snap.exists()) {
           }));
           setCardColor(user.cardColor || "#1a237e");
           setFontColor(user.fontColor || "#ffffff");
-          setButtonLabelColor(user.buttonLabelColor || "#000000");
+          setButtonLabelColor(user.buttonLabelColor || "#ffffff");
           setActions(Array.isArray(user.actions) && user.actions.length > 0
             ? user.actions
             : []);
@@ -1431,6 +1570,20 @@ async function handleSave() {
               </div>
             )}
          <div className="w-full flex flex-row items-center justify-center gap-8 my-4">
+  
+  {/* Card Color Picker */}
+  <div className="flex flex-col items-center">
+    <label className="text-xs font-semibold mb-2 flex items-center gap-2">
+      <FaPalette /> Card Color
+    </label>
+    <input
+      type="color"
+      value={cardColor}
+      onChange={e => setCardColor(e.target.value)}
+      className="w-10 h-10 border border-gray-400 rounded-full cursor-pointer"
+      aria-label="Card color"
+    />
+  </div>
   {/* Font Color Picker */}
   <div className="flex flex-col items-center">
     <label className="text-xs font-semibold mb-2 flex items-center gap-2">
@@ -1520,18 +1673,19 @@ async function handleSave() {
   )}
   {actions.length > 0 && (
     <>
-      {actions.map((action, idx) => (
-  <ActionEditor
-    key={action.id || idx}
-    action={action}
-    onChange={updated => updateAction(idx, updated)}
-    onRemove={() => removeAction(idx)}
-    // Add these two lines:
-    profile={profile}
-    cardId={cardId}
-     setProfile={setProfile} // add this line!
-  />
-))}
+     <div className="w-full">
+  {actions.map((action, idx) => (
+    <ActionEditor
+      key={action.id || idx}
+      action={action}
+      onChange={updated => updateAction(idx, updated)}
+      onRemove={() => removeAction(idx)}
+      profile={profile}
+      cardId={cardId}
+      setProfile={setProfile}
+    />
+  ))}
+</div>
 
       <button
         className="mt-6 text-white bg-purple-700 px-8 py-3 rounded-lg text-xl flex items-center gap-2"
@@ -1560,21 +1714,17 @@ async function handleSave() {
                     ))}
                   </div>
                   <div className="flex-1 py-6 px-8 max-h-[470px] overflow-auto">
-                    <input
-                      className="w-full border-b px-2 py-1 mb-4"
-                      placeholder="Paste or search a link"
-                      readOnly
-                    />
+                   
                     <div>
                       
                     {ACTION_TYPES.find(g => g.group === activeGroup).options.map(opt => (
   <button
     key={opt.type}
     onClick={async () => {
-      if(opt.type === "customButton") {
-        setActiveCustomAction("customButton");
-        return;
-      }
+  if (opt.type === "customButtonLink" || opt.type === "customButtonAttachment") {
+    setActiveCustomAction(opt.type);
+    return;
+  }
       let value = "";
       if (["email", "whatsapp", "youtube", "linkedin", "website"].includes(opt.type)) {
         value = prompt(`Enter your ${opt.label}:`)?.trim();
@@ -1601,19 +1751,66 @@ async function handleSave() {
   </button>
 ))}
 
-{activeCustomAction === "customButton" && (
+{/* FOR CUSTOM BUTTON (LINK) */}
+{activeCustomAction === "customButtonLink" && (
   <div className="pt-4 px-1">
     <label className="flex items-center font-bold gap-3 text-md mb-3">
       <FaLink className="text-purple-500" /> Button Text
     </label>
     <input
-      value={customButtonModalText}
-      onChange={e => setCustomButtonModalText(e.target.value)}
-      placeholder="e.g. View Portfolio or Learn More"
+      value={customButtonLabel}
+      onChange={e => setCustomButtonLabel(e.target.value)}
+      placeholder="e.g. Visit Portfolio"
       className="w-full py-2 px-4 rounded-2xl border-2 border-purple-200 shadow focus:outline-none focus:ring-2 focus:ring-purple-300 transition"
     />
+    <label className="flex items-center font-semibold gap-2 text-md mt-4 mb-2">
+      <FaGlobe className="text-blue-500" /> Insert Link
+    </label>
+    <input
+      value={customButtonUrl}
+      onChange={e => setCustomButtonUrl(e.target.value)}
+      placeholder="https://your-link.com"
+      className="w-full py-2 px-4 rounded-2xl border-2 border-blue-200 shadow focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
+      type="url"
+    />
+    <div className="w-full flex justify-end pt-4">
+      <button
+        className="px-7 py-2 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-800 transition"
+        disabled={!customButtonLabel || !customButtonUrl}
+        onClick={() => {
+          setActions(actions => [
+            ...actions,
+            {
+              type: "customButtonLink",
+              label: customButtonLabel,
+              url: customButtonUrl,
+              id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+            }
+          ]);
+          setShowActionPicker(false);
+          setActiveCustomAction(null);
+          setCustomButtonLabel("");
+          setCustomButtonUrl("");
+        }}
+      >
+        Add Custom Link Button
+      </button>
+    </div>
+  </div>
+)}
 
-    {/* Attachment with icon */}
+{/* FOR CUSTOM BUTTON (ATTACHMENT) */}
+{activeCustomAction === "customButtonAttachment" && (
+  <div className="pt-4 px-1">
+    <label className="flex items-center font-bold gap-3 text-md mb-3">
+      <FaPaperclip className="text-purple-500" /> Button Text
+    </label>
+    <input
+      value={customButtonLabel}
+      onChange={e => setCustomButtonLabel(e.target.value)}
+      placeholder="e.g. Download Resume"
+      className="w-full py-2 px-4 rounded-2xl border-2 border-purple-200 shadow focus:outline-none focus:ring-2 focus:ring-purple-300 transition"
+    />
     <label htmlFor="custom-action-attachment" className="mt-4 flex items-center gap-2 font-semibold text-blue-700 cursor-pointer">
       <FaPaperclip className="text-lg" /> Attach Photo or Document
     </label>
@@ -1622,7 +1819,18 @@ async function handleSave() {
       type="file"
       accept="image/*,.pdf,.doc,.docx"
       className="hidden"
-      onChange={handleCustomActionAttachmentUpload}
+      onChange={async e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const storage = getStorage();
+        const userId = auth.currentUser?.uid || "anonymous";
+        const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        setCustomButtonAttachmentUrl(url);
+        Swal.fire({ icon: "success", title: "Attachment uploaded!" });
+      }}
     />
     <button
       type="button"
@@ -1630,11 +1838,11 @@ async function handleSave() {
       className="mt-2 flex items-center gap-2 bg-blue-600 hover:bg-blue-800 text-white px-5 py-2 rounded-full shadow transition"
     >
       <FaPaperclip />
-      {customButtonModalAttachmentUrl ? "Change Attachment" : "Upload Attachment"}
+      {customButtonAttachmentUrl ? "Change Attachment" : "Upload Attachment"}
     </button>
-    {customButtonModalAttachmentUrl && (
+    {customButtonAttachmentUrl && (
       <a
-        href={customButtonModalAttachmentUrl}
+        href={customButtonAttachmentUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="block mt-2 font-semibold text-blue-600 underline"
@@ -1642,51 +1850,31 @@ async function handleSave() {
         View Attachment
       </a>
     )}
-
-    {/* Live Preview */}
-    {customButtonModalText && (
-      <button
-        className="
-          mt-6 w-full
-          bg-gradient-to-br from-purple-600 via-purple-500 to-blue-500
-          text-white font-bold py-3 rounded-full shadow-lg
-          hover:from-blue-600 hover:via-purple-700 hover:to-purple-800
-          transition
-        "
-        disabled
-        style={{ letterSpacing: '.04em' }}
-      >
-        {customButtonModalText || "Custom Button"}
-      </button>
-    )}
-
-    {/* Add Action Button */}
     <div className="w-full flex justify-end pt-4">
       <button
         className="px-7 py-2 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-800 transition"
-        disabled={!customButtonModalText}
+        disabled={!customButtonLabel || !customButtonAttachmentUrl}
         onClick={() => {
           setActions(actions => [
             ...actions,
             {
-              type: "customButton",
-              label: customButtonModalText,
-              attachmentUrl: customButtonModalAttachmentUrl || "",
+              type: "customButtonAttachment",
+              label: customButtonLabel,
+              attachmentUrl: customButtonAttachmentUrl,
               id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
             }
           ]);
           setShowActionPicker(false);
           setActiveCustomAction(null);
-          setCustomButtonModalText("");
-          setCustomButtonModalAttachmentUrl("");
+          setCustomButtonLabel("");
+          setCustomButtonAttachmentUrl("");
         }}
       >
-        Add Custom Button
+        Add Custom Attachment Button
       </button>
     </div>
   </div>
 )}
-
 
 
                     </div>
