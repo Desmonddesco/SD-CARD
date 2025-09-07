@@ -270,23 +270,7 @@ const handleLogout = async () => {
         <div className="max-w-3xl mx-auto">
           <div className="mb-8">
             <p className="text-lg font-medium select-none mb-2">Profile</p>
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0">
-              <a
-                href={`https://${profileLink}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm underline text-black"
-              >
-                {profileLink}
-              </a>
-              <button
-                onClick={handleCopyLink}
-                className="text-xs bg-gray-100 px-3 py-1 rounded ml-0 sm:ml-4"
-                type="button"
-              >
-                Copy Link
-              </button>
-            </div>
+          
           </div>
           {feedback && (
             <div className={`mb-4 p-2 rounded text-sm ${feedbackError ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{feedback}</div>

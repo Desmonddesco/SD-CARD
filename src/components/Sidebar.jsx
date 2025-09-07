@@ -8,10 +8,9 @@ import "sweetalert2/dist/sweetalert2.min.css";
 
 // Navigation items
 const navItems = [
-  { label: "Digital Cards", path: "/dashboard#digital-cards" },
+  { label: "Digital Cards", path: "/dashboard" },
   { label: "Tap/NFC Cards", external: "https://www.sbcard.co.za/product-category/nfc-cards/" },
-  { label: "Networking Toolkit", comingSoon: true },
-  { label: "Contact Book", path: "/contacts" },
+   { label: "Contact Book", path: "/contacts" },
   { label: "Analytics", path: "/analytics" }
 ];
 
@@ -87,45 +86,25 @@ export default function Sidebar({ open, onClose, user, loadingUser }) {
             ×
           </button>
         </div>
-        <button
-          className="w-full text-left py-2 px-2 hover:bg-gray-100 rounded mb-1"
-          onClick={() => { setSettingsOpen(false); alert("Upgrade Plan clicked"); }}
-        >
-          Upgrade Plan
-        </button>
+       <button
+  className="w-full text-left py-2 px-2 hover:bg-gray-100 rounded mb-1"
+  onClick={() => {
+    setSettingsOpen(false);
+    navigate("/subscription");
+  }}
+>
+  Upgrade Plan
+</button>
+
         <button
           className="w-full text-left py-2 px-2 hover:bg-gray-100 rounded mb-1"
           onClick={() => { setSettingsOpen(false); navigate("/ProfileSettingsPage"); }}
         >
           Settings
         </button>
-        <a
-          href=""
-          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setSettingsOpen(false)}
-        >
-          Help Center
-        </a>
-        <a
-          href=""
-          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setSettingsOpen(false)}
-        >
-          Feature Requests
-        </a>
-        <a
-          href=""
-          className="block w-full py-2 px-2 hover:bg-gray-100 rounded mb-1"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setSettingsOpen(false)}
-        >
-          Roadmap
-        </a>
+       
+        
+     
         <button
           className="w-full text-left py-2 px-2 text-red-600 border font-semibold hover:bg-red-600 hover:text-white rounded transition"
           onClick={handleLogout}

@@ -11,7 +11,7 @@ import { doc, getDoc, getDocs,  collection, addDoc, serverTimestamp, setDoc, upd
 import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { getStorage, ref, uploadString, getDownloadURL,uploadBytes } from "firebase/storage";
+import { getStorage, ref, uploadString, getDownloadURL,uploadBytes, uploadBytesResumable } from "firebase/storage";
 import QRCodeGenerator from "../components/QRCodeGenerator";
 
 
@@ -565,39 +565,64 @@ function DigitalCardPreview({
     });
   }
 
-  function handleRequestMeetingModal(e) {
-    e.preventDefault();
-    Swal.fire({
-      title: "Request a Meeting",
-      html: `
-        <input type="text" id="swal-meeting-name" class="swal2-input" placeholder="Name (required)" required maxlength="80" />
-        <input type="email" id="swal-meeting-email" class="swal2-input" placeholder="Email (required)" required maxlength="100" />
-        <textarea id="swal-meeting-message" class="swal2-textarea" rows="4" placeholder="Your proposed time or message"></textarea>
+ function handleRequestMeetingModal(e) {
+  e.preventDefault();
+  const haveCalendly = !!profile.calendlyLink && profile.calendlyLink.trim() !== "";
+
+  Swal.fire({
+    title: "Request a Meeting",
+    html: haveCalendly
+      ? `
+        <div>
+          <label style="font-weight:600;margin-bottom:6px;display:block;">Calendly Link</label>
+          <input type="url" id="swal-calendly-link" class="swal2-input" placeholder="Paste your Calendly link (https://calendly.com/…)" value="${profile.calendlyLink}" required style="margin-bottom:8px;" />
+        </div>
+      `
+      : `
+        <div style="margin-bottom:18px;">
+          
+          <button id="swal-calendly-create" style="margin-top:12px;padding:7px 20px;border:0;background:#0056f0;color:white;font-weight:600;border-radius:6px;cursor:pointer;">
+            Create Calendly Link
+          </button>
+        </div>
+        <input type="url" id="swal-calendly-link" class="swal2-input" placeholder="Paste your Calendly link (https://calendly.com/…)" required style="margin-bottom:8px;" />
       `,
-      showCloseButton: true,
-      confirmButtonText: 'Send Request',
-      focusConfirm: false,
-      width: 370,
-      preConfirm: () => {
-        const name = Swal.getPopup().querySelector('#swal-meeting-name').value.trim();
-        const email = Swal.getPopup().querySelector('#swal-meeting-email').value.trim();
-        const message = Swal.getPopup().querySelector('#swal-meeting-message').value.trim();
-        if (!name || !email) {
-          Swal.showValidationMessage(`Name and email are required`);
-          return false;
+    showCloseButton: true,
+    confirmButtonText: haveCalendly ? "Save" : "Send Meeting Link",
+    focusConfirm: false,
+    width: 390,
+    didOpen: () => {
+      if (!haveCalendly) {
+        const btn = document.getElementById("swal-calendly-create");
+        if (btn) {
+          btn.onclick = () => {
+            window.open("https://calendly.com/", "_blank", "noopener,noreferrer");
+          };
         }
-        return { name, email, message };
       }
-    }).then(result => {
-      if (result.isConfirmed) {
-        Swal.fire({
-          icon: "success",
-          title: "Request Sent!",
-          text: "Your meeting request has been delivered."
-        });
+    },
+    preConfirm: () => {
+      const calendlyVal = Swal.getPopup().querySelector('#swal-calendly-link').value.trim();
+      if (!calendlyVal || !calendlyVal.startsWith("https://calendly.com/")) {
+        Swal.showValidationMessage("Please enter a valid Calendly link (https://calendly.com/...)");
+        return false;
       }
-    });
-  }
+      return { calendlyLink: calendlyVal };
+    }
+  }).then(result => {
+    if (result.isConfirmed && result.value) {
+      // Save calendly link to state/profile (adjust for your setup)
+      setProfile(profile => ({ ...profile, calendlyLink: result.value.calendlyLink }));
+      Swal.fire({
+        icon: "success",
+        title: "Saved!",
+        text: "Your Calendly link has been saved.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    }
+  });
+}
 
   // Social
 const socialActions = actions.filter(
@@ -1104,7 +1129,10 @@ function removeUndefined(obj) {
 export default function DigitalCardEditor() {
    const [socialIconColor, setSocialIconColor] = useState("#ffffff"); // Default white
   const [isSaving, setIsSaving] = useState(false);
-  
+  const [isUploading, setIsUploading] = useState(false);
+const [uploadProgress, setUploadProgress] = useState(0);
+const [attachmentUploading, setAttachmentUploading] = useState(false);
+const [attachmentProgress, setAttachmentProgress] = useState(0);
     const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSmall, setIsSmall] = useState(window.innerWidth <= 1024);
   const cardScrollRef = useRef(null);
@@ -1302,45 +1330,79 @@ if (snap.exists()) {
     }
   }
   const onCropComplete = useCallback((_, croppedAreaPixels) => setCroppedArea(croppedAreaPixels), []);
-  async function handleCropConfirm() {
-    if (!avatarSrc || !croppedArea) {
+ async function handleCropConfirm() {
+  if (!avatarSrc || !croppedArea) {
+    setShowCrop(false);
+    setAvatarSrc(null);
+    return;
+  }
+  const img = await getCroppedImg(avatarSrc, croppedArea);
+
+  setIsUploading(true);
+  setUploadProgress(0);
+
+  const storage = getStorage();
+  const userId = auth.currentUser?.uid || "anonymous";
+  const fileName = `profilePhotos/${userId}_${Date.now()}.png`;
+  const storageRef = ref(storage, fileName);
+
+  // Convert base64 data URL to Blob for upload
+  const response = await fetch(img);
+  const blob = await response.blob();
+
+  const uploadTask = uploadBytesResumable(storageRef, blob);
+
+  uploadTask.on("state_changed",
+    (snapshot) => {
+      const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      setUploadProgress(prog);
+    },
+    (err) => {
+      setIsUploading(false);
+      Swal.fire({ icon: "error", title: "Photo Upload Failed", text: err.message });
+    },
+    async () => {
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      setProfile(prev => ({ ...prev, profilePhoto: url }));
+      setIsUploading(false);
       setShowCrop(false);
       setAvatarSrc(null);
-      return;
     }
-    const img = await getCroppedImg(avatarSrc, croppedArea);
-    try {
-      const storage = getStorage();
-      const userId = auth.currentUser?.uid || "anonymous";
-      const fileName = `profilePhotos/${userId}_${Date.now()}.png`;
-      const storageRef = ref(storage, fileName);
-      await uploadString(storageRef, img, "data_url");
-      const url = await getDownloadURL(storageRef);
-      setProfile(prev => ({ ...prev, profilePhoto: url }));
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "Photo Upload Failed", text: e.message });
-    }
-    setAvatarSrc(null);
-    setShowCrop(false);
-  }
+  );
+}
 
 async function handleCustomActionAttachmentUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
-  try {
-    const storage = getStorage();
-    const userId = auth.currentUser?.uid || "anonymous";
-    const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, fileName);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    setCustomButtonModalAttachmentUrl(url);
-    Swal.fire({ icon: "success", title: "Attachment uploaded for custom button!" });
-  } catch (err) {
-    Swal.fire({ icon: "error", title: "Attachment failed", text: err.message });
-  }
-}
 
+  setAttachmentUploading(true);
+  setAttachmentProgress(0);
+
+  const storage = getStorage();
+  const userId = auth.currentUser?.uid || "anonymous";
+  const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, fileName);
+
+  const uploadTask = uploadBytesResumable(storageRef, file);
+
+  uploadTask.on("state_changed",
+    (snapshot) => {
+      const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      setAttachmentProgress(prog);
+    },
+    (err) => {
+      setAttachmentUploading(false);
+      Swal.fire({ icon: "error", title: "Attachment upload failed", text: err.message });
+    },
+    async () => {
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      setCustomButtonAttachmentUrl(url);
+      setAttachmentUploading(false);
+      setAttachmentProgress(0);
+      Swal.fire({ icon: "success", title: "Attachment uploaded!" });
+    }
+  );
+}
 
 // ...inside your component...
 async function handleSave() {
@@ -1600,7 +1662,22 @@ async function handleSave() {
                     >
                       Select
                     </button>
+                    
                   </div>
+                  {isUploading && (
+  <div className="w-full mt-4">
+    <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+      <div
+        className="h-3 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-300"
+        style={{ width: `${uploadProgress}%`, transition: 'width .4s' }}
+      />
+    </div>
+    <div className="text-center text-xs text-gray-600 mt-1 font-bold">
+      Uploading your photo... {uploadProgress}%
+    </div>
+  </div>
+)}
+
                 </div>
               </div>
             )}
@@ -1828,7 +1905,7 @@ async function handleSave() {
           setCustomButtonUrl("");
         }}
       >
-        Add Custom Link Button
+        Add Custom Button
       </button>
     </div>
   </div>
@@ -1846,9 +1923,6 @@ async function handleSave() {
       placeholder="e.g. Download Resume"
       className="w-full py-2 px-4 rounded-2xl border-2 border-purple-200 shadow focus:outline-none focus:ring-2 focus:ring-purple-300 transition"
     />
-    <label htmlFor="custom-action-attachment" className="mt-4 flex items-center gap-2 font-semibold text-blue-700 cursor-pointer">
-      <FaPaperclip className="text-lg" /> Attach Photo or Document
-    </label>
     <input
       id="custom-action-attachment"
       type="file"
@@ -1857,24 +1931,59 @@ async function handleSave() {
       onChange={async e => {
         const file = e.target.files[0];
         if (!file) return;
+        setAttachmentUploading(true);
+        setAttachmentProgress(0);
+
         const storage = getStorage();
         const userId = auth.currentUser?.uid || "anonymous";
         const fileName = `custom-attachments/${userId}_${Date.now()}_${file.name}`;
         const storageRef = ref(storage, fileName);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        setCustomButtonAttachmentUrl(url);
-        Swal.fire({ icon: "success", title: "Attachment uploaded!" });
+
+        const uploadTask = uploadBytesResumable(storageRef, file);
+        uploadTask.on(
+          "state_changed",
+          snapshot => {
+            const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            setAttachmentProgress(prog);
+          },
+          err => {
+            setAttachmentUploading(false);
+            Swal.fire({ icon: "error", title: "Attachment upload failed", text: err.message });
+          },
+          async () => {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            setCustomButtonAttachmentUrl(url);
+            setAttachmentUploading(false);
+            setAttachmentProgress(0);
+            Swal.fire({ icon: "success", title: "Attachment uploaded!" });
+          }
+        );
       }}
     />
     <button
       type="button"
-      onClick={() => document.getElementById('custom-action-attachment').click()}
+      onClick={() => document.getElementById("custom-action-attachment").click()}
       className="mt-2 flex items-center gap-2 bg-blue-600 hover:bg-blue-800 text-white px-5 py-2 rounded-full shadow transition"
+      disabled={attachmentUploading}
     >
       <FaPaperclip />
       {customButtonAttachmentUrl ? "Change Attachment" : "Upload Attachment"}
     </button>
+    {/* PROGRESS BAR BELOW */}
+    {attachmentUploading && (
+      <div className="w-full mt-3">
+        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-3 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-300"
+            style={{ width: `${attachmentProgress}%`, transition: "width .4s" }}
+          />
+        </div>
+        <div className="text-center text-xs text-gray-600 mt-1 font-bold">
+          Uploading attachment... {attachmentProgress}%
+        </div>
+      </div>
+    )}
+
     {customButtonAttachmentUrl && (
       <a
         href={customButtonAttachmentUrl}
@@ -1888,7 +1997,7 @@ async function handleSave() {
     <div className="w-full flex justify-end pt-4">
       <button
         className="px-7 py-2 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-800 transition"
-        disabled={!customButtonLabel || !customButtonAttachmentUrl}
+        disabled={!customButtonLabel || !customButtonAttachmentUrl || attachmentUploading}
         onClick={() => {
           setActions(actions => [
             ...actions,
@@ -1897,7 +2006,7 @@ async function handleSave() {
               label: customButtonLabel,
               attachmentUrl: customButtonAttachmentUrl,
               id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
-            }
+            },
           ]);
           setShowActionPicker(false);
           setActiveCustomAction(null);
@@ -1905,11 +2014,12 @@ async function handleSave() {
           setCustomButtonAttachmentUrl("");
         }}
       >
-        Add Custom Attachment Button
+        Add Custom Button
       </button>
     </div>
   </div>
 )}
+
 
 
                     </div>

@@ -164,23 +164,7 @@ const NotificationsPage = () => {
         <div className="max-w-3xl mx-auto">
           <h1 className="text-lg font-medium mb-8 select-none">Notifications</h1>
 
-          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-            <a
-              href={`https://${profileLink}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm underline text-black truncate select-text"
-            >
-              {profileLink}
-            </a>
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="text-xs bg-gray-100 px-3 py-1 rounded mt-2 sm:mt-0"
-            >
-              Copy Link
-            </button>
-          </div>
+        
 
           <p className="mb-6 text-sm text-gray-600 select-none">
             Manage how you receive updates for incoming leads.

@@ -1,13 +1,12 @@
 import React from "react";
 import { Link as RouterLink, useLocation } from "react-router-dom";
 
-// Update navItems for your app structure
+// Updated navigation items for your sidebar
 const navItems = [
   { key: "link-settings", label: "Link Settings", href: "/LinkSettingsPage" },
   { key: "profile", label: "Profile", href: "/ProfileSettingsPage" },
   { key: "notifications", label: "Notifications", href: "/NotificationsPage" },
-  { key: "upgrade", label: "Upgrade", href: "/upgrade" },
-  { key: "billing", label: "Billing", href: "/settings/billing" },
+  { key: "subscription", label: "Subscription", href: "/subscription" },
 ];
 
 export default function LeftNav({
@@ -20,7 +19,7 @@ export default function LeftNav({
 }) {
   const location = useLocation();
 
-  // Automatic highlight if parent doesn't pass activeKey
+  // Determine which nav item to highlight
   const highlightKey =
     activeKey ||
     navItems.find((item) => location.pathname.startsWith(item.href))?.key ||
@@ -36,13 +35,13 @@ export default function LeftNav({
         onClick={onClose}
         aria-hidden="true"
       />
-     <nav
-  className={`fixed top-0 left-0 z-40 h-full w-64 border-r border-gray-200 bg-white flex-shrink-0 
-    overflow-y-auto hide-scrollbar transform transition-transform duration-300
-    ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
-  aria-label="Sidebar Navigation"
-  style={{ backgroundColor: "#fff" }}
->
+      <nav
+        className={`fixed top-0 left-0 z-40 h-full w-64 border-r border-gray-200 bg-white flex-shrink-0 
+          overflow-y-auto hide-scrollbar transform transition-transform duration-300
+          ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
+        aria-label="Sidebar Navigation"
+        style={{ backgroundColor: "#fff" }}
+      >
         <div className="px-6 py-8 flex flex-col h-full">
           <RouterLink
             to="/dashboard"
@@ -72,7 +71,6 @@ export default function LeftNav({
               </li>
             ))}
           </ul>
-          {/* Logout Button */}
           <button
             onClick={onLogout}
             className="mt-12 text-red-600 border border-red-600 px-4 py-2 rounded font-semibold hover:bg-red-600 hover:text-white transition"

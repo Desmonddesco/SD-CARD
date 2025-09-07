@@ -11,7 +11,6 @@ import { motion } from "framer-motion";
 import CardThumbnail from "../components/CardThumbnail";
 import QRCodeGenerator from "../components/QRCodeGenerator";
 
-// How many cards can 'free' users create?
 const FREE_CARD_LIMIT = 1;
 
 const useIsMobile = () => {
@@ -31,21 +30,18 @@ function slugifyFullName(str = "") {
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9\-]/g, "");
 }
-
-// Generates a shareable link using the full name slug
 function getShareUrl(fullName) {
   return `${window.location.origin}/card/${slugifyFullName(fullName)}`;
 }
 
-// SweetAlert modal for QR/Share, disables actions if not premium
 function showShareModal(card, canShareQR) {
   Swal.fire({
     title: canShareQR ? "Share & Download QR" : "Upgrade Required",
     html: `<div id="qr-modal-root"></div>${!canShareQR ? 
       "<div style='color:#dc2626;margin-top:10px;'>Only Premium can share/download more than one card QR.<br/>Upgrade to access this feature.</div>" : ""}`,
     didOpen: () => {
-      import('react-dom').then(ReactDOM => {
-        ReactDOM.createRoot(document.getElementById('qr-modal-root')).render(
+      import('react-dom/client').then(({ createRoot }) => {
+        createRoot(document.getElementById('qr-modal-root')).render(
           <QRCodeGenerator
             url={card.shareLink}
             cardName={card.name || "Digital Card"}
@@ -61,11 +57,7 @@ function showShareModal(card, canShareQR) {
   });
 }
 
-function CardDisplay({
-  card, onEdit, onDelete,
-  setCardToPreview, navigate,
-  canShareQR
-}) {
+function CardDisplay({ card, onEdit, onDelete, setCardToPreview, navigate, canShareQR }) {
   const handleDeleteClick = e => {
     e.stopPropagation();
     Swal.fire({
@@ -83,7 +75,7 @@ function CardDisplay({
   return (
     <div
       className="w-full sm:max-w-xs min-h-[180px] sm:min-h-[220px] rounded-2xl shadow-lg p-4 sm:p-7 flex flex-col items-center bg-white border transition cursor-pointer hover:border-blue-500"
-      style={{ boxShadow: `0 6px 32px 0 rgba(60,60,90,0.10), 0 0 0 1.5px ${card.cardColor}44` }}
+      style={{ boxShadow: `0 6px 32px 0 rgba(60,60,90,0.10), 0 0 0 1.5px ${card.cardColor || "#006"}44` }}
     >
       <div className="flex w-full justify-between items-center mb-2">
         <span className="inline-flex items-center px-3 py-1 rounded-lg bg-green-400 text-black font-bold text-sm shadow" style={{ fontFamily: 'inherit' }}>
@@ -164,7 +156,6 @@ const networkingTools = [
 ];
 
 const Dashboard = () => {
-  // Simulate subscription type. Replace with actual from your user profile/database.
   const [subscription, setSubscription] = useState('free'); // 'free', 'premium', or 'admin'
   const [cardToPreview, setCardToPreview] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -180,12 +171,14 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
+  // ALWAYS fetch ALL cards for the display list
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (curr) => {
       setLoadingUser(true);
       if (!curr) {
         setUser({ displayName: "Guest", email: "guest@example.com", name: "" });
         setCards([]);
+        setSubscription('free');
         setLoadingUser(false);
         setLoadingCards(false);
         return;
@@ -197,14 +190,14 @@ const Dashboard = () => {
           email: curr.email,
           name: (userDoc.exists() && userDoc.data().name) ? userDoc.data().name : (curr.displayName || "User")
         });
-        // Optionally get subscription from userDoc.data().subscription
-        // setSubscription(userDoc.exists() ? userDoc.data().subscription : "free");
+        setSubscription(userDoc.exists() ? userDoc.data().subscription : "free");
       } catch {
         setUser({
           displayName: curr.displayName || "User",
           email: curr.email,
           name: curr.displayName || "User"
         });
+        setSubscription('free');
       }
       setLoadingUser(false);
 
@@ -212,52 +205,20 @@ const Dashboard = () => {
       try {
         const q = query(collection(db, "cards"), where("userId", "==", curr.uid));
         const querySnap = await getDocs(q);
-        const cardList = querySnap.docs.map((docSnap, idx) => {
+        let cardListAll = querySnap.docs.map(docSnap => {
           const cardData = docSnap.data();
           const fullName = cardData.name || "card";
-          // Use fullName for shareLink
-          if (
-            (subscription === 'free' && idx === 0) ||
-            (subscription !== 'free')
-          ) {
-            return { id: docSnap.id, ...cardData, shareLink: getShareUrl(fullName) };
-          } else {
-            return { id: docSnap.id, ...cardData, shareLink: null };
-          }
+          return { id: docSnap.id, ...cardData, shareLink: getShareUrl(fullName) };
         });
-        setCards(cardList);
+        // Show ALL cards for the user
+        setCards(cardListAll);
       } catch {
         setCards([]);
       }
       setLoadingCards(false);
     });
     return () => unsub();
-  }, [subscription]);
-
-  useEffect(() => {
-    async function loadCards() {
-      setLoadingCards(true);
-      const curr = auth.currentUser;
-      if (!curr) { setCards([]); setLoadingCards(false); return; }
-      const q = query(collection(db, "cards"), where("userId", "==", curr.uid));
-      const querySnap = await getDocs(q);
-      const cardList = querySnap.docs.map((docSnap, idx) => {
-        const cardData = docSnap.data();
-        const fullName = cardData.name || "card";
-        if (
-          (subscription === 'free' && idx === 0) ||
-          (subscription !== 'free')
-        ) {
-          return { id: docSnap.id, ...cardData, shareLink: getShareUrl(fullName) };
-        } else {
-          return { id: docSnap.id, ...cardData, shareLink: null };
-        }
-      });
-      setCards(cardList);
-      setLoadingCards(false);
-    }
-    loadCards();
-  }, [subscription]);
+  }, []);
 
   async function handleDelete(cardId) {
     try {
@@ -268,18 +229,43 @@ const Dashboard = () => {
     }
   }
 
-  function handleCreateCardClick() {
-    if (subscription === 'free' && cards.length >= FREE_CARD_LIMIT) {
-      Swal.fire({
-        icon: "info",
-        title: "Upgrade Required",
-        text: "Free subscription allows only one card. Upgrade to Premium to create more cards.",
-        showConfirmButton: true,
-        confirmButtonText: "Upgrade"
-      });
-    } else {
-      navigate("/digitalcardeditor/new");
+  // This is the ONLY place card creation is allowed:
+  async function handleCreateCardClick() {
+    if (subscription === 'free') {
+  const curr = auth.currentUser;
+  if (!curr) return;
+  const q = query(collection(db, "cards"), where("userId", "==", curr.uid));
+  const querySnap = await getDocs(q);
+  if (querySnap.size >= FREE_CARD_LIMIT) {
+    const result = await Swal.fire({
+      icon: "info",
+      title: "Upgrade Required",
+      html: `
+        <div style="font-size:16px;">
+          <strong>You’ve reached your card limit.</strong>
+          <br />
+          Free accounts include <b>one digital card</b>.
+          <br /><br />
+          Upgrade to <span style="color:#6c47ff;font-weight:600">Premium</span> for unlimited cards, custom branding, extra features & more.
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Upgrade Now",
+      cancelButtonText: "Not Now",
+      customClass: {
+        title: "swal2-title",
+        popup: "swal2-modal"
+      }
+    });
+
+    if (result.isConfirmed) {
+      navigate("/subscription");
+      return;
     }
+    return;
+  }
+}
+navigate("/digitalcardeditor/new");
   }
 
   const greetingName = (() => {
