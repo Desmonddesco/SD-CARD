@@ -289,15 +289,18 @@ export default function DigitalCardPreview({
         );
       }
       return (
-        <button
-          key={action.id || idx}
-          className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-          style={{ color: buttonLabelColor, textDecoration: "none" }}
-          onClick={() => handleRequestMeetingModal(profile)}
-        >
-          {action.icon || <FaUser />}
-          <span className="truncate">{action.label || "Request a Meeting"}</span>
-        </button>
+        <a
+  key={action.id || idx}
+  href={action.calendlyLink}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+  style={{ color: buttonLabelColor, textDecoration: "none" }}
+>
+  {action.icon || <FaUser />}
+  <span className="truncate">{action.label || "Book a Meeting"}</span>
+</a>
+
       );
     }
 

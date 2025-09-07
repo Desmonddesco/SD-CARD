@@ -336,22 +336,47 @@ case "customButtonAttachment":
     </div>
   );
 
-        case "bookMeeting":
-      return (
-        <div className="border rounded-xl p-4 mb-4 bg-white">
-          <div className="flex justify-between items-center mb-1">
-            <b className="flex items-center gap-2"><FaUser /> Book a Meeting</b>
-            <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
-          </div>
-          {/* Optionally show Calendly information or allow user to set link */}
-          <input
-            className="w-full border-b my-1 py-1 px-2"
-            placeholder="Button Label"
-            value={action.label || ""}
-            onChange={e => onChange({ ...action, label: e.target.value })}
-          />
-        </div>
-      );
+   case "bookMeeting":
+  return (
+    <div className="border rounded-xl p-4 mb-4 bg-white">
+      <div className="flex justify-between items-center mb-1">
+        <b className="flex items-center gap-2"><FaUser /> Book a Meeting</b>
+        <button className="text-red-500" onClick={onRemove}><FaTimes /></button>
+      </div>
+      <input
+        className="w-full border-b my-1 py-1 px-2 font-semibold"
+        placeholder="Button Label"
+        value={action.label || ""}
+        onChange={e => onChange({ ...action, label: e.target.value })}
+        maxLength={48}
+      />
+      <input
+        className="w-full border-b my-1 py-1 px-2 mt-3"
+        placeholder="Paste your Calendly link (https://calendly.com/...)"
+        value={action.calendlyLink || ""}
+        onChange={e =>
+          onChange({
+            ...action,
+            calendlyLink: e.target.value
+          })
+        }
+        type="url"
+        maxLength={200}
+        autoComplete="off"
+      />
+      <div className="mt-2">
+        <a
+          href="https://calendly.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline text-sm"
+        >
+          Don’t have a link? Create one on Calendly
+        </a>
+      </div>
+    </div>
+  );
+
 
     // --- ADD THIS: Share Your Details With Me ---
     case "shareDetails":
@@ -565,64 +590,39 @@ function DigitalCardPreview({
     });
   }
 
- function handleRequestMeetingModal(e) {
-  e.preventDefault();
-  const haveCalendly = !!profile.calendlyLink && profile.calendlyLink.trim() !== "";
-
-  Swal.fire({
-    title: "Request a Meeting",
-    html: haveCalendly
-      ? `
-        <div>
-          <label style="font-weight:600;margin-bottom:6px;display:block;">Calendly Link</label>
-          <input type="url" id="swal-calendly-link" class="swal2-input" placeholder="Paste your Calendly link (https://calendly.com/…)" value="${profile.calendlyLink}" required style="margin-bottom:8px;" />
-        </div>
-      `
-      : `
-        <div style="margin-bottom:18px;">
-          
-          <button id="swal-calendly-create" style="margin-top:12px;padding:7px 20px;border:0;background:#0056f0;color:white;font-weight:600;border-radius:6px;cursor:pointer;">
-            Create Calendly Link
-          </button>
-        </div>
-        <input type="url" id="swal-calendly-link" class="swal2-input" placeholder="Paste your Calendly link (https://calendly.com/…)" required style="margin-bottom:8px;" />
+  function handleRequestMeetingModal(e) {
+    e.preventDefault();
+    Swal.fire({
+      title: "Request a Meeting",
+      html: `
+        <input type="text" id="swal-meeting-name" class="swal2-input" placeholder="Name (required)" required maxlength="80" />
+        <input type="email" id="swal-meeting-email" class="swal2-input" placeholder="Email (required)" required maxlength="100" />
+        <textarea id="swal-meeting-message" class="swal2-textarea" rows="4" placeholder="Your proposed time or message"></textarea>
       `,
-    showCloseButton: true,
-    confirmButtonText: haveCalendly ? "Save" : "Send Meeting Link",
-    focusConfirm: false,
-    width: 390,
-    didOpen: () => {
-      if (!haveCalendly) {
-        const btn = document.getElementById("swal-calendly-create");
-        if (btn) {
-          btn.onclick = () => {
-            window.open("https://calendly.com/", "_blank", "noopener,noreferrer");
-          };
+      showCloseButton: true,
+      confirmButtonText: 'Send Request',
+      focusConfirm: false,
+      width: 370,
+      preConfirm: () => {
+        const name = Swal.getPopup().querySelector('#swal-meeting-name').value.trim();
+        const email = Swal.getPopup().querySelector('#swal-meeting-email').value.trim();
+        const message = Swal.getPopup().querySelector('#swal-meeting-message').value.trim();
+        if (!name || !email) {
+          Swal.showValidationMessage(`Name and email are required`);
+          return false;
         }
+        return { name, email, message };
       }
-    },
-    preConfirm: () => {
-      const calendlyVal = Swal.getPopup().querySelector('#swal-calendly-link').value.trim();
-      if (!calendlyVal || !calendlyVal.startsWith("https://calendly.com/")) {
-        Swal.showValidationMessage("Please enter a valid Calendly link (https://calendly.com/...)");
-        return false;
+    }).then(result => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          icon: "success",
+          title: "Request Sent!",
+          text: "Your meeting request has been delivered."
+        });
       }
-      return { calendlyLink: calendlyVal };
-    }
-  }).then(result => {
-    if (result.isConfirmed && result.value) {
-      // Save calendly link to state/profile (adjust for your setup)
-      setProfile(profile => ({ ...profile, calendlyLink: result.value.calendlyLink }));
-      Swal.fire({
-        icon: "success",
-        title: "Saved!",
-        text: "Your Calendly link has been saved.",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    }
-  });
-}
+    });
+  }
 
   // Social
 const socialActions = actions.filter(
@@ -784,29 +784,31 @@ if (action.type === "customButtonAttachment") {
     if (action.type === "bookMeeting") {
       if (profile.calendlyLink && profile.calendlyLink.trim() !== "") {
         return (
-          <a
-            key={action.id || idx}
-            href={profile.calendlyLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-            style={{ color: buttonLabelColor, textDecoration: "none" }}
-          >
+         <a
+      href={action.calendlyLink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+      style={{ color: buttonLabelColor, textDecoration: "none" }}
+    >
             {action.icon || <FaUser />}
             <span className="truncate">{action.label || "Book a Meeting"}</span>
           </a>
         );
       } else {
         return (
-          <button
-            key={action.id || idx}
-            className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
-            style={{ color: buttonLabelColor, textDecoration: "none" }}
-            onClick={handleRequestMeetingModal}
-          >
-            {action.icon || <FaUser />}
-            <span className="truncate">{action.label || "Request a Meeting"}</span>
-          </button>
+          <a
+  key={action.id || idx}
+  href={action.calendlyLink}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl border border-white bg-white/10 font-semibold text-base transition hover:bg-white/20"
+  style={{ color: buttonLabelColor, textDecoration: "none" }}
+>
+  {action.icon || <FaUser />}
+  <span className="truncate">{action.label || "Book a Meeting"}</span>
+</a>
+
         );
       }
     }
