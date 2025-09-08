@@ -220,14 +220,42 @@ const Dashboard = () => {
     return () => unsub();
   }, []);
 
+  // Delete all leads and all views, then the card itself
+async function deleteCardAndLeads(cardId) {
+  // Delete all leads
+  const leadsRef = collection(db, "cards", cardId, "leads");
+  const leadsSnap = await getDocs(leadsRef);
+  const leadDeletes = [];
+  leadsSnap.forEach(leadDoc => {
+    leadDeletes.push(deleteDoc(leadDoc.ref));
+  });
+
+  // Delete all views
+  const viewsRef = collection(db, "cards", cardId, "views");
+  const viewsSnap = await getDocs(viewsRef);
+  const viewDeletes = [];
+  viewsSnap.forEach(viewDoc => {
+    viewDeletes.push(deleteDoc(viewDoc.ref));
+  });
+
+  // Wait for all subdocs deleted
+  await Promise.all([...leadDeletes, ...viewDeletes]);
+
+  // Now delete the card itself
+  await deleteDoc(doc(db, "cards", cardId));
+}
+
   async function handleDelete(cardId) {
-    try {
-      await deleteDoc(doc(db, "cards", cardId));
-      setCards(prev => prev.filter(c => c.id !== cardId));
-    } catch (err) {
-      Swal.fire({ icon: "error", title: "Failed to delete card. Try again." });
-    }
+  try {
+    await deleteCardAndLeads(cardId);
+    setCards(prev => prev.filter(c => c.id !== cardId));
+  } catch (err) {
+    Swal.fire({ icon: "error", title: "Failed to delete card. Try again." });
   }
+}
+
+
+  
 
   // This is the ONLY place card creation is allowed:
   async function handleCreateCardClick() {

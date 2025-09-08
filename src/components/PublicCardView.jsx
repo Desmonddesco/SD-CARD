@@ -6,6 +6,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import Swal from "sweetalert2";
 import DigitalCardPreview from "./DigitalCardPreview";
 
+// Gradient backgrounds
 const gradientBackgrounds = [
   "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
   "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
@@ -77,8 +78,8 @@ async function handleLeadSubmit(cardId, lead) {
   await addDoc(leadsRef, { ...lead, createdAt: serverTimestamp() });
 }
 
-// Download contact function (for vCard and analytics increment)
-function downloadContactVCF(profile) {
+// Download contact and record analytics event (with location)
+async function downloadContactVCF(profile) {
   const vcf =
     `BEGIN:VCARD\n` +
     `VERSION:3.0\n` +
@@ -100,14 +101,34 @@ function downloadContactVCF(profile) {
   a.click();
   document.body.removeChild(a);
 
-  // Increment contactsDownloaded in Firestore
+  // Analytics: increment field and write subcollection log with location
   if (profile.id) {
     const cardRef = doc(db, "cards", profile.id);
     updateDoc(cardRef, {
       contactsDownloaded: increment(1)
-    }).catch((error) => {
-      console.error("Failed to update contactsDownloaded:", error);
-    });
+    }).catch(() => {});
+
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      const geo = await res.json();
+      await addDoc(collection(db, "cards", profile.id, "views"), {
+        createdAt: serverTimestamp(),
+        downloadContact: true,
+        location: {
+          city: geo.city,
+          region: geo.region,
+          country: geo.country_name,
+          lat: geo.latitude,
+          lng: geo.longitude,
+          org: geo.org
+        }
+      });
+    } catch {
+      await addDoc(collection(db, "cards", profile.id, "views"), {
+        createdAt: serverTimestamp(),
+        downloadContact: true
+      });
+    }
   }
 }
 
@@ -150,19 +171,57 @@ function PublicCardView() {
   const [error, setError] = useState(null);
   const [showQR, setShowQR] = useState(false);
 
-  // Visitor analytics tracker
+  // Visitor analytics tracker (main analytics increment)
   useEffect(() => {
     let visitId = localStorage.getItem("anonymousVisitorId");
     if (!visitId) {
       visitId = Math.random().toString(36).substring(2) + Date.now().toString(36);
       localStorage.setItem("anonymousVisitorId", visitId);
     }
-
     if (firestoreCardId) {
       const cardRef = doc(db, "cards", firestoreCardId);
       updateDoc(cardRef, {
         views: increment(1),
         visitors: arrayUnion(visitId),
+      }).catch(() => {});
+    }
+  }, [firestoreCardId]);
+
+  // Log each view with location, but NOT if also logging a download in the same session
+  useEffect(() => {
+    if (!firestoreCardId) return;
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(geo => {
+        const viewDoc = {
+          createdAt: serverTimestamp(),
+          location: {
+            city: geo.city,
+            region: geo.region,
+            country: geo.country_name,
+            lat: geo.latitude,
+            lng: geo.longitude,
+            org: geo.org
+          }
+        };
+        addDoc(collection(db, "cards", firestoreCardId, "views"), viewDoc);
+      })
+      .catch(() => {
+        addDoc(collection(db, "cards", firestoreCardId, "views"), {
+          createdAt: serverTimestamp()
+        });
+      });
+  }, [firestoreCardId]);
+
+  // Traffic source tracker (?src=)
+  useEffect(() => {
+    if (!firestoreCardId) return;
+    const url = new URL(window.location.href);
+    const src = url.searchParams.get("src");
+    if (src) {
+      const cardRef = doc(db, "cards", firestoreCardId);
+      updateDoc(cardRef, {
+        [`trafficSources.${src}`]: increment(1)
       }).catch(() => {});
     }
   }, [firestoreCardId]);
@@ -322,7 +381,6 @@ function PublicCardView() {
                   ×
                 </button>
               </div>
-
               <div className="flex justify-center mb-6">
                 <div className="bg-white p-4 rounded-2xl border-2 border-gray-100 shadow-sm">
                   <QRCodeCanvas
@@ -335,11 +393,9 @@ function PublicCardView() {
                   />
                 </div>
               </div>
-
               <p className="text-sm text-gray-600 text-center mb-6 font-medium">
                 Scan to view <span className="font-bold">{card.name}</span>'s card
               </p>
-
               <div className="space-y-3">
                 <button
                   onClick={() => {
@@ -359,7 +415,6 @@ function PublicCardView() {
                 >
                   📋 Copy Link
                 </button>
-
                 <button
                   onClick={async () => {
                     if (navigator.share) {
@@ -383,7 +438,6 @@ function PublicCardView() {
                   📱 Share Card
                 </button>
               </div>
-
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 break-all">
                   {currentUrl}
