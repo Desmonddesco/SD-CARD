@@ -7,7 +7,7 @@ import { useParams } from "react-router-dom";
 import Cropper from "react-easy-crop";
 import Swal from "sweetalert2";
 import { auth, db } from "../firebase";
-import { doc, getDoc, getDocs,  collection, addDoc, serverTimestamp, setDoc, updateDoc,  query, where, } from "firebase/firestore";
+import { doc, getDoc, getDocs,arrayUnion,  collection, addDoc, serverTimestamp, setDoc, updateDoc,  query, where, increment} from "firebase/firestore";
 import Sidebar from "../components/Sidebar";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -1274,6 +1274,7 @@ if (snap.exists()) {
 }, [cardId]);
 
 
+
   useEffect(() => {
     const onResize = () => setIsSmall(window.innerWidth <= 1024);
     window.addEventListener("resize", onResize);
@@ -1446,10 +1447,17 @@ async function handleSave() {
       cardDocRef = doc(db, "cards", cardId);
       finalCardId = cardId;
     } else {
+      // INITIALIZE ALL ANALYTICS FIELDS HERE:
       cardDocRef = await addDoc(collection(db, "cards"), {
+        views: 0,
+        visitors: [],
+        contactsDownloaded: 0,
+        leads: 0,
         name: fullName,
         userId: curr.uid,
         createdAt: serverTimestamp(),
+        uniqueUrl,      // set public url for card
+        fullNameSlug
       });
       finalCardId = cardDocRef.id;
       window.history.replaceState(null, null, `/card-editor/${finalCardId}`);
@@ -1465,7 +1473,7 @@ async function handleSave() {
       buttonLabelColor,
       socialIconColor,
       userId: curr.uid,
-      uniqueUrl: cardUrl, // <<--- Use here!
+      uniqueUrl, // ensure this matches initialization above
       fullNameSlug,
       updatedAt: serverTimestamp()
     });
@@ -1560,15 +1568,15 @@ async function handleSave() {
                 }}
               >
                 <DigitalCardPreview
-                  profile={profile}
-                  actions={actions}
-                  cardColor={cardColor}
-                  fontColor={fontColor}
-                  buttonLabelColor={buttonLabelColor}
-                  socials={socials}
-                  style={{ margin: "auto" }}
-                   socialIconColor={socialIconColor}   // <-- ADD THIS LINE!
-                />
+  profile={{ ...profile, id: cardId }}      // <-- pass the card ID in profile
+  actions={actions}
+  cardColor={cardColor}
+  fontColor={fontColor}
+  buttonLabelColor={buttonLabelColor}
+  socials={socials}
+  style={{ margin: "auto" }}
+  socialIconColor={socialIconColor}
+/>
               </div>
             </div>
           )}
@@ -2107,7 +2115,7 @@ async function handleSave() {
             onClick={e => e.stopPropagation()}>
             <button className="fixed top-4 right-5 text-white text-3xl z-10" onClick={() => setShowPreview(false)} style={{ background: "rgba(0,0,0,0.05)", borderRadius: "50%", padding: "2px" }}><FaTimes /></button>
             <DigitalCardPreview
-              profile={profile}
+              profile={{ ...profile, id: cardId }}      // <-- pass the card ID in profile
               actions={actions}
               cardColor={cardColor}
               fontColor={fontColor}

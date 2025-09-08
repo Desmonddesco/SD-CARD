@@ -3,7 +3,8 @@ import Swal from "sweetalert2";
 import {
    FaPaperclip, FaEnvelope, FaLinkedin, FaWhatsapp, FaYoutube, FaGlobe, FaImage, FaLink, FaUser
 } from "react-icons/fa";
-import { getStorage, ref, uploadString, getDownloadURL,uploadBytes } from "firebase/storage";
+import { doc, updateDoc, increment,collection,addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
 
 // Social icons config and order
 const SOCIAL_ICON_MAP = {
@@ -16,6 +17,7 @@ const SOCIAL_ICON_MAP = {
 const SOCIAL_KEYS = ["whatsapp", "youtube", "linkedin", "website", "email"];
 
 // Modal handlers
+
 function handleShowContactDetails(profile) {
   Swal.fire({
     title: "My Contact Details",
@@ -94,23 +96,34 @@ function handleShareDetailsModal(profile) {
     focusConfirm: false,
     width: 370,
     preConfirm: () => {
-      const name = Swal.getPopup().querySelector('#swal-input-name').value.trim();
-      const email = Swal.getPopup().querySelector('#swal-input-email').value.trim();
-      const phone = Swal.getPopup().querySelector('#swal-input-phone').value.trim();
-      if (!name || !email || !phone) {
-        Swal.showValidationMessage(`Please fill in all required fields`);
-        return false;
-      }
-      return { name, email, phone: "+27" + phone };
+    const name = Swal.getPopup().querySelector('#swal-input-name').value.trim();
+    const email = Swal.getPopup().querySelector('#swal-input-email').value.trim();
+    const phone = Swal.getPopup().querySelector('#swal-input-phone').value.trim();
+    const message = Swal.getPopup().querySelector('#swal-input-message').value.trim();
+    if (!name || !email || !phone) {
+      Swal.showValidationMessage(`Please fill in all required fields`);
+      return false;
     }
-  }).then(result => {
-    if (result.isConfirmed) {
-      Swal.fire({
-        icon: "success",
-        title: "Sent!",
-        text: "Your details have been shared."
-      });
-    }
+    return { name, email, phone, message };
+  }
+}).then(result => {
+  if (result.isConfirmed && profile.id) {
+    handleLeadSubmit(profile.id, result.value);
+    Swal.fire({
+      icon: "success",
+      title: "Sent!",
+      text: "Your details have been shared."
+    });
+  }
+});
+}
+// handleLeadSubmit saves a lead to Firestore
+async function handleLeadSubmit(cardId, lead) {
+  // Save lead under /cards/{cardId}/leads/
+  const leadsRef = collection(db, "cards", cardId, "leads");
+  await addDoc(leadsRef, {
+    ...lead,                 // {name, email, phone, message}
+    createdAt: serverTimestamp()
   });
 }
 function downloadContactVCF(profile) {
@@ -126,6 +139,7 @@ function downloadContactVCF(profile) {
     (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
     (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
     `END:VCARD`;
+
   const blob = new Blob([vcf], { type: 'text/vcard' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -133,39 +147,16 @@ function downloadContactVCF(profile) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-}
 
-
-function handleRequestMeetingModal(profile) {
-  Swal.fire({
-    title: "Request a Meeting",
-    html: `
-      <input type="text" id="swal-meeting-name" class="swal2-input" placeholder="Name (required)" required maxlength="80" />
-      <input type="email" id="swal-meeting-email" class="swal2-input" placeholder="Email (required)" required maxlength="100" />
-      <textarea id="swal-meeting-message" class="swal2-textarea" rows="3" placeholder="Proposed time or message (optional)" maxlength="300"></textarea>
-    `,
-    showCloseButton: true,
-    confirmButtonText: 'Send Request',
-    focusConfirm: false,
-    width: 370,
-    preConfirm: () => {
-      const name = Swal.getPopup().querySelector('#swal-meeting-name').value.trim();
-      const email = Swal.getPopup().querySelector('#swal-meeting-email').value.trim();
-      if (!name || !email) {
-        Swal.showValidationMessage(`Name and email are required`);
-        return false;
-      }
-      return { name, email };
-    }
-  }).then(result => {
-    if (result.isConfirmed) {
-      Swal.fire({
-        icon: "success",
-        title: "Request Sent!",
-        text: "Your meeting request has been delivered."
-      });
-    }
-  });
+  // Increment contactsDownloaded in Firestore
+  if (profile.id) {
+    const cardRef = doc(db, "cards", profile.id);
+    updateDoc(cardRef, {
+      contactsDownloaded: increment(1)
+    }).catch((error) => {
+      console.error("Failed to update contactsDownloaded:", error);
+    });
+  }
 }
 
 function getSocialHref(type, value) {
@@ -178,6 +169,7 @@ function getSocialHref(type, value) {
 export default function DigitalCardPreview({
   profile = {},
   socials = {},
+   onDownloadContact, // <-- handler from public card only!
   socialIconColor = "#fff",
   cardColor = "#1a237e",
   fontColor = "#fff",

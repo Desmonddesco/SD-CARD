@@ -1,23 +1,94 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
-import { FaTags, FaPlus, FaMapMarkerAlt, FaQrcode, FaExternalLinkAlt } from "react-icons/fa";
-import BlurOverlay from "../components/BlurOverlay";
+import { FaCloudUploadAlt, FaMicrosoft, FaHubspot, FaSalesforce, FaGlobeAmericas } from "react-icons/fa";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 
+// Export options for dropdown
+const EXPORT_OPTIONS = [
+  { label: "CSV for Excel/Sheets", value: "csv" },
+  { label: "Microsoft Dynamics 365", value: "dynamics", icon: <FaMicrosoft /> },
+  { label: "Salesforce CRM", value: "salesforce", icon: <FaSalesforce /> },
+  { label: "HubSpot CRM", value: "hubspot", icon: <FaHubspot /> },
+  { label: "Zoho CRM", value: "zoho", icon: <FaGlobeAmericas /> },
+];
+
+// CSV export utility
+function exportLeadsToCSV(leads, filename = "leads.csv") {
+  if (!leads.length) return;
+  const header = ["Name", "Email", "Phone", "Message", "Card", "Received"];
+  const rows = leads.map(lead =>
+    [lead.name, lead.email, lead.phone, lead.message, lead.cardName, lead.createdAt]
+      .map(field => `"${field || ""}"`).join(",")
+  );
+  const csvContent = [header.join(","), ...rows].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Export dropdown component
+function ExportDropdown({ leads, disabled }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef();
+
+  function handleDropdownExport(option) {
+    setOpen(false);
+    if (option.value === "csv") {
+      exportLeadsToCSV(leads);
+    } else {
+      Swal.fire({
+        icon: "info",
+        title: "Integration Coming Soon!",
+        text: `API integration with ${option.label} is coming soon.`,
+        timer: 3500,
+        showConfirmButton: false,
+      });
+    }
+  }
+
+  return (
+    <div className="relative" ref={btnRef}>
+      <button
+        className="flex items-center gap-2 px-5 py-2 rounded shadow bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-indigo-700 hover:to-blue-700 transition font-semibold text-base"
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+        type="button"
+      >
+        <FaCloudUploadAlt /> Export
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 min-w-[200px] bg-white border border-gray-200 rounded shadow-lg z-40 text-sm animate-fade-in">
+          {EXPORT_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              className="w-full flex items-center gap-2 text-left px-4 py-2 hover:bg-blue-50 transition border-b last:border-0"
+              onClick={() => handleDropdownExport(opt)}
+            >
+              {opt.icon && <span>{opt.icon}</span>}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ContactBookPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [contacts] = useState([]); // Plug in Firestore contacts here later
-
-  // User state from Firebase
+  const [leads, setLeads] = useState([]);
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
-  // Auth + Firestore user fetch
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -33,10 +104,47 @@ export default function ContactBookPage() {
     return unsubscribe;
   }, []);
 
-  // Premium or admin checker
+  // Retrieve all leads
+  useEffect(() => {
+    async function fetchLeads() {
+      if (!user) return;
+      const cardsRef = collection(db, "cards");
+      const cardsSnap = await getDocs(query(cardsRef, where("userId", "==", user.uid)));
+      let allLeads = [];
+      for (const cardDoc of cardsSnap.docs) {
+        const cardName = cardDoc.data().name || "";
+        const leadsRef = collection(db, "cards", cardDoc.id, "leads");
+        const leadsSnap = await getDocs(leadsRef);
+        leadsSnap.forEach(leadDoc => {
+          const data = leadDoc.data();
+          allLeads.push({
+            id: leadDoc.id,
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            message: data.message,
+            cardName,
+            createdAt: data.createdAt?.toDate()?.toLocaleString() || "",
+          });
+        });
+      }
+      setLeads(allLeads);
+    }
+    fetchLeads();
+  }, [user]);
+
   const isPremium = user && (user.subscription === "premium" || user.subscription === "admin");
 
-  // SweetAlert2 Toast near the clicked button
+  const displayedLeads = leads.filter(lead =>
+    !search ||
+    (lead.name && lead.name.toLowerCase().includes(search.toLowerCase())) ||
+    (lead.email && lead.email.toLowerCase().includes(search.toLowerCase())) ||
+    (lead.phone && lead.phone.toLowerCase().includes(search.toLowerCase())) ||
+    (lead.message && lead.message.toLowerCase().includes(search.toLowerCase())) ||
+    (lead.cardName && lead.cardName.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  // Upgrade restriction notice
   const handleUpgradeToast = (popupText = "Upgrade your plan to use this feature!", position = "top-end") => {
     Swal.fire({
       toast: true,
@@ -56,19 +164,19 @@ export default function ContactBookPage() {
   };
 
   if (loadingUser) return <div className="flex items-center justify-center h-screen text-lg">Loading...</div>;
-  if (!user) return <div className="flex items-center justify-center h-screen text-lg">Please log in to view your contact book.</div>;
+  if (!user) return <div className="flex items-center justify-center h-screen text-lg">Please log in to view your leads.</div>;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-r from-blue-50 to-indigo-50 overflow-hidden">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} loadingUser={loadingUser} />
 
       <div className="flex-1 flex flex-col">
-        {/* Top bar for mobile */}
-        <header className="flex items-center justify-between bg-white border-b p-4 md:hidden">
+        {/* Top bar */}
+        <header className="flex items-center justify-between bg-white border-b p-4 md:hidden shadow-sm">
           <button
             aria-label="Toggle menu"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-md hover:bg-gray-200 transition"
+            className="p-2 rounded-md hover:bg-blue-100 transition"
           >
             <svg width={22} height={22} fill="currentColor">
               <rect width="100%" height="4" y="2" rx="2" />
@@ -84,135 +192,78 @@ export default function ContactBookPage() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 sm:p-8">
-          {/* PAGE HEADER & SUBHEADING: Always visible */}
-          <div className="flex flex-col md:flex-row md:justify-between mb-5 items-start md:items-center">
+        <main className="flex-1 overflow-auto p-4 sm:p-8 bg-gradient-to-tl from-blue-100/40 to-white">
+          <div className="flex flex-col md:flex-row md:justify-between mb-8 items-start md:items-center">
             <div>
-              <h1 className="text-2xl font-bold mb-1">Contact Book</h1>
-              <div className="text-gray-400 text-sm">
-                All the contacts you collect in person, online, or virtually will appear here.
-                You can follow up, export, or organize them with tags.
+              <h1 className="text-2xl font-bold mb-1 text-gray-800">Captured Leads</h1>
+              <div className="text-gray-500 text-sm">
+                Manage all inbound leads submitted through your digital cards and easily export the data to Excel, or your CRM of choice.
               </div>
             </div>
+            <ExportDropdown
+              leads={leads}
+              disabled={!isPremium}
+            />
           </div>
 
-          {/* Top Bar - Banner: Always visible */}
-          <div className="w-full bg-blue-50 text-sm px-4 py-2 mb-2 flex items-center justify-between font-semibold border-b">
-            <span className="flex items-center gap-2 text-blue-900">
-              <span className="text-orange-600">⚡</span>
-              Never Lose a Lead Again – Join Thousands Upgrading to SB CARD Plus!
-            </span>
-            <a href="/free-trial" className="text-blue-800 underline hover:text-blue-600 transition">
-              Start Free Trial
-            </a>
-          </div>
-
-          {/* Actions: Search, Filters, Buttons (always visible, but toasts for free users) */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 mb-5">
+          {/* Search bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 mb-7">
             <input
               type="text"
-              className="flex-1 px-4 py-2 rounded border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition text-sm"
-              placeholder="Find any contact by name, email, phone…"
+              className="flex-1 px-4 py-2 rounded border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 transition text-sm"
+              placeholder="Search by name, email, phone, card, or message…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               onFocus={() => {
-                if (!isPremium) handleUpgradeToast("Upgrade to search contacts!", "top-end");
+                if (!isPremium) handleUpgradeToast("Upgrade to search leads!", "top-end");
               }}
               readOnly={!isPremium}
             />
-            <button
-              className="flex gap-2 items-center px-4 py-2 border border-gray-300 rounded shadow-sm bg-white hover:bg-gray-100 text-gray-600 font-semibold"
-              onClick={() => {
-                isPremium ? alert('Filters coming soon!') : handleUpgradeToast("Upgrade to use filters!", "top-end");
-              }}
-            >
-              Filters <span><FaTags /></span>
-            </button>
-            <button
-              className="flex gap-2 items-center px-5 py-2 rounded shadow font-semibold bg-black text-white hover:bg-gray-800 transition"
-              onClick={() => {
-                isPremium ? alert('Add New Contact') : handleUpgradeToast("Upgrade to add contacts!", "top-end");
-              }}
-            >
-              <FaPlus /> Add New Contact
-            </button>
-            <button
-              className="flex gap-2 items-center px-4 py-2 border border-gray-200 rounded shadow-sm bg-white hover:bg-blue-50 text-gray-700 font-semibold"
-              onClick={() => {
-                isPremium ? alert('Map feature coming soon!') : handleUpgradeToast("Upgrade to use Map!", "top-end");
-              }}
-            >
-              <FaMapMarkerAlt /> Map
-            </button>
-            <button
-              className="flex gap-2 items-center px-4 py-2 border border-gray-200 rounded shadow-sm bg-white hover:bg-blue-50 text-gray-700 font-semibold"
-              onClick={() => {
-                isPremium ? alert('Scan feature coming soon!') : handleUpgradeToast("Upgrade to use Scan!", "top-end");
-              }}
-            >
-              <FaQrcode /> Scan
-            </button>
-            <button
-              className="flex gap-2 items-center px-4 py-2 border border-gray-200 rounded shadow-sm bg-white hover:bg-blue-50 text-gray-700 font-semibold"
-              onClick={() => {
-                isPremium ? alert('Export feature coming soon!') : handleUpgradeToast("Upgrade to export!", "top-end");
-              }}
-            >
-              Export <FaExternalLinkAlt />
-            </button>
           </div>
 
-          {/* Manage Tags Button (always visible, but toasts for free users) */}
-          <button
-            className="flex items-center gap-2 mb-2 px-4 py-2 border border-gray-300 rounded bg-white shadow-sm hover:bg-gray-100 font-semibold text-gray-700"
-            style={{ maxWidth: 160 }}
-            onClick={() => {
-              isPremium ? alert('Manage Tags feature coming soon!') : handleUpgradeToast("Upgrade to manage tags!", "top-end");
-            }}
-          >
-            <FaTags /> Manage Tags
-          </button>
-
-          {/* Blur/lock only contact table for free users */}
-          <div className="relative">
-            <div className={!isPremium ? "blur-sm select-none pointer-events-none" : ""}>
-              <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-gray-500 border-b pb-2 mb-2">
-                <span>Contact</span>
-                <span>Tags</span>
-                <span>Connected With</span>
+          {/* Leads Table */}
+          <div className="relative w-full">
+            <div className={"rounded-xl shadow bg-white p-2 sm:p-4" + (!isPremium ? " blur-sm select-none pointer-events-none" : "")}>
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-2 text-xs font-semibold text-gray-500 border-b pb-2 mb-2">
+                <span>Name</span>
+                <span>Email</span>
+                <span>Phone</span>
+                <span>Message</span>
                 <span>Card</span>
-                <span>Date</span>
+                <span>Received</span>
               </div>
-              {/* Contact Rows or Empty State */}
-              {contacts.length === 0 ? (
+              {displayedLeads.length === 0 ? (
                 <div className="w-full flex flex-col items-center py-20">
-                  {/* Placeholder SVG */}
                   <svg width={64} height={64} className="mb-4 text-indigo-300" viewBox="0 0 64 64" fill="none">
                     <rect x="8" y="20" width="48" height="36" rx="4" fill="#E0E7FF" />
                     <rect x="22" y="34" width="20" height="4" rx="2" fill="#A5B4FC" />
                     <rect x="22" y="42" width="16" height="2" rx="1" fill="#A5B4FC" />
                     <rect x="18" y="28" width="28" height="2" rx="1" fill="#A5B4FC" />
                   </svg>
-                  <div className="text-lg font-semibold text-gray-700 mb-2">Start Building Your Network</div>
+                  <div className="text-lg font-semibold text-gray-700 mb-2">No leads yet!</div>
                   <div className="text-gray-500 mb-4 text-center max-w-xs">
-                    Add contacts by scanning cards, uploading files, or using forms.
+                    As people connect, all lead details appear here from your digital cards.
                   </div>
                 </div>
               ) : (
-                contacts.map(contact => (
-                  <div className="grid grid-cols-5 gap-2 text-xs items-center py-2 border-b last:border-b-0" key={contact.id}>
-                    {/* Render contact info here */}
+                displayedLeads.map(lead => (
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2 text-xs items-center py-2 border-b last:border-b-0" key={lead.id}>
+                    <span className="font-semibold text-gray-900">{lead.name}</span>
+                    <span className="truncate">{lead.email}</span>
+                    <span className="truncate">{lead.phone}</span>
+                    <span className="truncate">{lead.message}</span>
+                    <span className="truncate text-indigo-700">{lead.cardName}</span>
+                    <span className="text-gray-500">{lead.createdAt}</span>
                   </div>
                 ))
               )}
             </div>
             {!isPremium && (
               <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                {/* Subtle overlay to reinforce locked table */}
                 <div className="bg-white/60 backdrop-blur-sm rounded w-full h-full pointer-events-none" />
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-black text-sm font-medium bg-white/90 rounded px-4 py-2 shadow pointer-events-auto">
-                    Upgrade to Premium to access contacts!
+                    Upgrade to Premium to access leads!
                   </span>
                 </div>
               </div>

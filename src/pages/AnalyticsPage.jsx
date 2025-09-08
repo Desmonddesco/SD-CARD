@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
@@ -40,7 +40,12 @@ export default function AnalyticsPage() {
   // Auth user setup
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
+const [contactsDownloaded, setContactsDownloaded] = useState(0);
 
+  // Real metrics
+  const [realViews, setRealViews] = useState(0);
+  const [realCardCount, setRealCardCount] = useState(0);
+  const [uniqueVisitors, setUniqueVisitors] = useState(0);
   // Auth + Firestore user fetch
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -57,16 +62,46 @@ export default function AnalyticsPage() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+  if (!user) return;
+
+  async function fetchCardAnalytics() {
+    const cardsRef = collection(db, "cards");
+    const createdSnap = await getDocs(query(cardsRef, where("userId", "==", user.uid)));
+    let totalViews = 0;
+    let uniqueVisitorsSet = new Set();
+    let totalContactsDownloaded = 0;
+
+    createdSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      totalViews += typeof data.views === "number" ? data.views : 0;
+      if (Array.isArray(data.visitors)) {
+        data.visitors.forEach(v => uniqueVisitorsSet.add(v));
+      }
+      // FIX: sum contactsDownloaded for every card
+      totalContactsDownloaded += typeof data.contactsDownloaded === "number" ? data.contactsDownloaded : 0;
+    });
+
+    setRealViews(totalViews);
+    setRealCardCount(createdSnap.size);
+    setUniqueVisitors(uniqueVisitorsSet.size);
+    setContactsDownloaded(totalContactsDownloaded); // <-- ensure this runs 
+  }
+  fetchCardAnalytics();
+}, [user]);
   // Premium/admin logic
   const isPremium = user && (user.subscription === "premium" || user.subscription === "admin");
 
-  // Metrics (can be loaded from DB for real)
-  const metrics = [
-    { label: "Leads Generated", value: 0 },
-    { label: "Views", value: 0, change: 0.1, highlight: true },
-    { label: "Contacts Downloaded", value: 0 },
-    { label: "Card Created", value: 0 },
-  ];
+  // Metrics array now uses real data
+const metrics = [
+  
+  { label: "Views", value: realViews, change: "", highlight: true },
+  { label: "Card Created", value: realCardCount },
+  { label: "Leads Generated", value: 0 },
+  { label: "Contacts Downloaded", value: contactsDownloaded },       // <-- Here!
+];
+
+
 
   // SweetAlert2 Toast
   const handleUpgradeToast = (popupText = "Upgrade your plan to see analytics!", position = "top-end") => {

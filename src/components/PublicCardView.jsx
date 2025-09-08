@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, arrayUnion, increment, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { QRCodeCanvas } from "qrcode.react";
+import Swal from "sweetalert2";
 import DigitalCardPreview from "./DigitalCardPreview";
 
-// Blue gradient palette
 const gradientBackgrounds = [
   "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
   "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
@@ -18,6 +18,98 @@ const gradientBackgrounds = [
   "linear-gradient(135deg, #8360c3 0%, #2ebf91 100%)",
   "linear-gradient(135deg, #70e1f5 0%, #ffd194 100%)"
 ];
+
+// Lead share modal (called only from public page)
+function handleShareDetailsModal(profile) {
+  Swal.fire({
+    title: "Share your details with me",
+    html: `
+      <form id="share-details-form" style="text-align:left;margin:0;padding:0;">
+        <div style="margin-bottom:12px;">
+          <input type="text" id="swal-input-name" placeholder="Name (required)" required maxlength="80"
+            style="font-size:15px;width:100%;padding:9px 2px 7px 2px;border:none;border-bottom:2px solid #b6bcd4;outline:none;background:transparent;"/>
+        </div>
+        <div style="margin-bottom:12px;">
+          <input type="email" id="swal-input-email" placeholder="Email (required)" required maxlength="100"
+            style="font-size:15px;width:100%;padding:9px 2px 7px 2px;border:none;border-bottom:2px solid #b6bcd4;outline:none;background:transparent;"/>
+        </div>
+        <div style="margin-bottom:12px;display:flex;align-items:center;">
+          <span style="background:#f4f4f4;border-radius:6px;padding:7px 11px;margin-right:6px;border:1px solid #d3d3d3;color:#1366d6;font-weight:500;font-size:14px;">+27</span>
+          <input type="tel" id="swal-input-phone" placeholder="Phone (required)" required maxlength="11"
+            style="font-size:15px;flex:1;padding:9px 2px 7px 2px;border:none;border-bottom:2px solid #b6bcd4;outline:none;background:transparent;"/>
+        </div>
+        <div style="margin-bottom:8px;">
+          <textarea id="swal-input-message" rows="3" placeholder="Message (optional)" maxlength="500"
+            style="font-size:14px;width:100%;padding:9px 2px 7px 2px;border:none;border-bottom:2px solid #b6bcd4;outline:none;background:transparent;resize:none;"></textarea>
+        </div>
+      </form>
+    `,
+    showCloseButton: true,
+    confirmButtonText: 'Send',
+    focusConfirm: false,
+    width: 370,
+    preConfirm: () => {
+      const name = Swal.getPopup().querySelector('#swal-input-name').value.trim();
+      const email = Swal.getPopup().querySelector('#swal-input-email').value.trim();
+      const phone = Swal.getPopup().querySelector('#swal-input-phone').value.trim();
+      const message = Swal.getPopup().querySelector('#swal-input-message').value.trim();
+      if (!name || !email || !phone) {
+        Swal.showValidationMessage(`Please fill in all required fields`);
+        return false;
+      }
+      return { name, email, phone, message };
+    }
+  }).then(result => {
+    if (result.isConfirmed && profile.id) {
+      handleLeadSubmit(profile.id, result.value);
+      Swal.fire({
+        icon: "success",
+        title: "Sent!",
+        text: "Your details have been shared."
+      });
+    }
+  });
+}
+
+// Firestore save
+async function handleLeadSubmit(cardId, lead) {
+  const leadsRef = collection(db, "cards", cardId, "leads");
+  await addDoc(leadsRef, { ...lead, createdAt: serverTimestamp() });
+}
+
+// Download contact function (for vCard and analytics increment)
+function downloadContactVCF(profile) {
+  const vcf =
+    `BEGIN:VCARD\n` +
+    `VERSION:3.0\n` +
+    `FN:${profile.name ?? ""}\n` +
+    `ORG:${profile.company ?? ""}\n` +
+    (profile.jobTitle ? `TITLE:${profile.jobTitle}\n` : "") +
+    (profile.website ? `URL:${profile.website}\n` : "") +
+    (profile.email ? `EMAIL:${profile.email}\n` : "") +
+    (profile.phone ? `TEL;CELL:${profile.phone}\n` : "") +
+    (profile.address ? `ADR;TYPE=home:;;${profile.address};;;;\n` : "") +
+    (profile.linkedin ? `URL:${profile.linkedin}\n` : "") +
+    `END:VCARD`;
+
+  const blob = new Blob([vcf], { type: 'text/vcard' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${profile.name ?? 'contact'}.vcf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Increment contactsDownloaded in Firestore
+  if (profile.id) {
+    const cardRef = doc(db, "cards", profile.id);
+    updateDoc(cardRef, {
+      contactsDownloaded: increment(1)
+    }).catch((error) => {
+      console.error("Failed to update contactsDownloaded:", error);
+    });
+  }
+}
 
 function getGradientFromColor(cardColor) {
   if (!cardColor) return gradientBackgrounds[0];
@@ -51,12 +143,31 @@ function slugifyFullName(str) {
 }
 
 function PublicCardView() {
-  const { cardId } = useParams(); // "cardId" is full name slug here!
+  const { cardId } = useParams();
   const [card, setCard] = useState(null);
+  const [firestoreCardId, setFirestoreCardId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showQR, setShowQR] = useState(false);
 
+  // Visitor analytics tracker
+  useEffect(() => {
+    let visitId = localStorage.getItem("anonymousVisitorId");
+    if (!visitId) {
+      visitId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem("anonymousVisitorId", visitId);
+    }
+
+    if (firestoreCardId) {
+      const cardRef = doc(db, "cards", firestoreCardId);
+      updateDoc(cardRef, {
+        views: increment(1),
+        visitors: arrayUnion(visitId),
+      }).catch(() => {});
+    }
+  }, [firestoreCardId]);
+
+  // Fetch card from Firestore
   useEffect(() => {
     async function fetchCard() {
       if (!cardId) {
@@ -64,18 +175,17 @@ function PublicCardView() {
         setLoading(false);
         return;
       }
-
       try {
-        // Find any card where uniqueUrl ends with `/card/{slug}`
         const customUrl = `${window.location.origin}/card/${cardId.toLowerCase()}`;
         const q = query(
           collection(db, "cards"),
           where("uniqueUrl", "==", customUrl)
         );
         const snapshot = await getDocs(q);
-
         if (!snapshot.empty) {
-          const cardData = snapshot.docs[0].data();
+          const docRef = snapshot.docs[0];
+          const cardData = docRef.data();
+          const id = docRef.id;
           if (cardData.actions && Array.isArray(cardData.actions)) {
             cardData.actions.forEach(a => {
               if (
@@ -87,6 +197,7 @@ function PublicCardView() {
             });
           }
           setCard(cardData);
+          setFirestoreCardId(id);
         } else {
           setError("Card not found.");
         }
@@ -151,8 +262,10 @@ function PublicCardView() {
     >
       <div className="max-w-sm mx-auto relative z-10">
         <DigitalCardPreview
-          profile={card}
+          profile={{ ...card, id: firestoreCardId }}
           actions={card.actions || []}
+          onDownloadContact={downloadContactVCF}
+          onShareDetails={handleShareDetailsModal}
           cardColor={card.cardColor || "#1a237e"}
           fontColor={card.fontColor || "#ffffff"}
           buttonLabelColor={card.buttonLabelColor || "#ffffff"}
